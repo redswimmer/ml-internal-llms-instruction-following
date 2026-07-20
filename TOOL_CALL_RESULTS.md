@@ -25,10 +25,15 @@ I initially reproduced the paper's own text-only instruction following
 results, then extended both of its core experiments, linear probing and
 [representation engineering](https://arxiv.org/abs/2310.01405), to a
 tool-calling setting, using the same model and methodology throughout,
-to see if the same findings hold. I'm not planning to go into detail on
-the initial recreation. This report will mainly focus on the LLMs
-accept/reject decision, and tool calling as the mechanism for testing
-it.
+to see if the same findings hold. I ran everything on
+Mistral-7B-Instruct-v0.3, the only one of the paper's four models with
+real tool-calling support, on an RTX 4090 (24GB VRAM), and stuck with
+their model rather than a newer one like Qwen to keep the comparison
+direct. 
+
+I'm not planning to go into detail on the initial recreation.
+This report will mainly focus on the LLMs accept/reject decision, and
+tool calling as the mechanism for testing it.
 
 ### Contributions
 
@@ -54,22 +59,44 @@ decline, well above the 0.50 chance level:
 
 | | Task generalization | Instruction-type generalization |
 |---|---|---|
-| Text-only (paper) | 0.74 | 0.50 |
-| Tool-calling (ours) | 0.71 | 0.56 |
+| Text-only (paper) | 0.74 ± 0.02 | 0.50 ± 0.05 |
+| Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
+| Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
 
-**Can that knowledge be steered?** Nudging the model's representation
-toward "success" should raise how often it actually succeeds. In
-tool-calling, it doesn't:
+Text-only (ours) is my own recreation of the paper's experiment: same
+model, same method, run on my own hardware with my own seeds. It lands
+close to their published numbers, not exactly on them. That's expected
+for an independent rerun, and it's the reproduction check I did before
+extending anything. Tool-calling (ours) runs that identical pipeline on
+tool-calling requests instead of free text, so that's the comparison
+that's actually fair.
 
-| | Original | Random | Instruction |
+**Can that knowledge be steered?** In the paper, nudging the model's
+representation toward "success" raised how often it actually succeeded.
+I found it doesn't, in tool-calling:
+
+| | Original SR | Random SR | Inst-follow SR |
 |---|---|---|---|
-| Text-only (paper) | 0.58 | 0.56 | 0.64 |
-| Tool-calling (ours) | 0.34 | 0.34 | 0.33 |
+| Text-only (paper) | 0.58 ± 0.00 | 0.56 ± 0.02 | 0.64 ± 0.02 |
+| Text-only (ours) | 0.525 ± 0.00 | 0.533 ± 0.004 | 0.570 ± 0.00 |
+| Tool-calling (ours) | 0.338 ± 0.00 | 0.340 ± 0.003 | 0.325 ± 0.00 |
 
-The model still "knows" in tool-calling, if anything more strongly than
-in the paper's original setting. Steering that knowledge doesn't
-transfer: RE never raises tool-calling success. Both results, and why,
-are covered below.
+Original and Inst-follow are truly deterministic on my side, greedy
+decoding against a fixed direction, so ± 0.00 is exact, not just one
+run. The paper's own Inst-follow std comes from retraining their probe
+per seed; my direction is a closed-form mean-difference vector instead
+(why, in Representation Engineering below), so there's no seed variance
+left to average there.
+
+Same logic here. Text-only (ours) is the recreated experiment, and the
+gap between it and the paper's own numbers comes from my own judge and
+my own tuned direction, not from tool calling. The real comparison is
+Text-only (ours) against Tool-calling (ours), same pipeline both times.
+The model still "knows" in tool-calling. If anything it knows more
+strongly than in the paper's original setting. But steering that
+knowledge doesn't transfer. The instruction direction drops below both
+original and random, where in the text-only setting it clearly beat
+both. Both results, and why, are covered below.
 
 ## Extending the Dataset
 
