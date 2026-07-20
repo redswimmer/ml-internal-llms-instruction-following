@@ -18,7 +18,7 @@ for following the instruction, an agent either has the right capability
 for a request or it doesn't, and getting that judgment wrong (guessing
 instead of declining) is arguably more dangerous than writing a mediocre
 paragraph. I wanted to see if the same "internal knowing" the paper
-found extends to that decision of knowing when to refuse to following
+found extends to that decision of knowing when to refuse to follow
 instructions.
 
 I initially reproduced the paper's own text-only instruction following
@@ -99,7 +99,7 @@ line.
 
 The fix: replace it with a binary pass/fail judge, with explicit criteria
 instead of an unanchored number. To trust the result, I used a
-teacher/student setup. `gpt-5.6-luna` runs the judge in production, cheap
+teacher/student setup. `GPT 5.6 Luna` runs the judge in production, cheap
 and fast enough to score every row, validated against Claude Sonnet 5
 reading every response fresh as an independent check rather than a
 static gold set. Getting there took several rounds, including two
