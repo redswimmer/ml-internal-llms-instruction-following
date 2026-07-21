@@ -261,19 +261,50 @@ A linear probe is a small classifier trained directly on the model's own
 internal activations to predict whether a response will comply with an
 instruction, before the model has even finished generating it, the
 paper's own definition of "knowing internally." Here, complying means
-picking the right tool or correctly declining. Same procedure as the
-paper: `LRProbe`, same 3 layers × 3 tokens, 5 seeds, verified identical
-to what we used throughout this project so any difference below is
-signal, not pipeline drift.
+picking the right tool or correctly declining. Same probe architecture
+as the paper (`LRProbe`), same 3 layers × 3 token positions, 5 seeds per
+cell.
 
-| | Task generalization | Instruction-type generalization |
-|---|---|---|
-| Text-only (paper) | 0.74 ± 0.02 | 0.50 ± 0.05 |
-| Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
-| Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
+The paper runs two distinct generalization tests. I ran the tool-calling
+equivalent of both.
 
-The nuance is in token position. Instruction-type generalization by
-token (early layer):
+**Task generalization** asks: trained on some requests, does the probe
+predict compliance on requests it's never seen, within the same
+instruction condition? Both instruction types are pooled into one
+training set and split 80/20 by the underlying task, identical to how
+the paper's own task-generalization experiment pools all 5 of its
+instruction types together, split by task. The split holds out request
+content, not instruction type.
+
+| | Task generalization |
+|---|---|
+| Text-only (paper) | 0.74 ± 0.02 |
+| Text-only (ours) | 0.737 ± 0.037 |
+| Tool-calling (ours) | 0.706 ± 0.059 |
+
+Clearly above chance, matching the paper's finding.
+
+**Instruction-type generalization** is the harder test: train on one
+instruction condition only, test on a condition the probe has never
+seen a single example of. The paper does this over 5 types (train on 4,
+test on the held-out 5th, repeat 5 times, average). We only have 2
+instruction types, `tool:in_scope` and `tool:out_of_scope`, so it
+collapses to 2 folds: train on all `in_scope` rows, test on
+`out_of_scope`, and the reverse, averaged.
+
+That's not a shortcut, it reflects how the dataset is built on purpose.
+The paper's 5 types are 5 unrelated textual constraints (forbid a word,
+end with a phrase) layered onto the same task. Our extension tests one
+binary decision, does a tool exist for this request, so there are only
+2 conditions to hold out in the first place; inventing extra
+tool-calling "instruction types" just to reach 5 would have been
+arbitrary. But the cost is real: a 2-fold average has nowhere near the
+statistical cushion of a 5-fold one, and the two conditions we do have
+are inherently more related to each other (both are the same "should a
+tool fire" judgment) than the paper's 5 unrelated constraints are. Both
+push the same direction, toward more cross-condition transfer than the
+paper's setup would produce, independent of whether tool-calling
+representations actually differ from text-only ones.
 
 | Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
 |---|---|---|---|
@@ -281,18 +312,24 @@ token (early layer):
 | Middle | 0.51 | 0.500 | 0.602 |
 | Last | 0.51 | 0.498 | 0.656 |
 
-First token (prompt-only, the position the paper itself emphasizes)
-matches our text-only run's chance-level result almost exactly. Middle and last
-diverge well above chance, likely because they mean something
-structurally different in a short, schema-bound tool call versus free
-text, not because instruction-type actually became learnable there.
+At the first token, prompt-only, before generation starts, the position
+the paper leans on hardest, tool-calling lands close to our own
+text-only chance-level result. Middle and last diverge well above
+chance. I can't cleanly attribute that to one cause: it's consistent
+with token position meaning something structurally different in a
+short, schema-bound tool call than in free text, and it's equally
+consistent with the 2-fold, closely-related-types limitation above.
+Given both explanations are live, I'd treat the middle/last divergence
+as suggestive, not as evidence that instruction-type became newly
+learnable in tool-calling.
 
-One more real wrinkle: pooling both instruction types together (needed
-to match the paper's own procedure) hides a big split. `tool:out_of_scope`
-alone is nearly perfectly separable (0.69–0.99 AUROC on its own data),
-`tool:in_scope` alone is near chance (0.50–0.70). The pooled numbers
-above sit between the two, don't read them as both types being equally
-learnable.
+**One more thing the paper doesn't test at all, that I added**: training
+and testing a probe on each instruction type separately, instead of
+pooled. `tool:out_of_scope` alone is nearly perfectly separable
+(0.69–0.99 AUROC using only its own data); `tool:in_scope` alone sits
+near chance (0.50–0.70). The pooled task-generalization number above
+sits between the two, a large part of that signal is `out_of_scope`
+carrying the average, not both types being equally learnable.
 
 ## Representation Engineering
 
