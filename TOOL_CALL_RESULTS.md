@@ -146,18 +146,22 @@ Note: Trimmed to the fields that matter here; each row's full JSON also
 carries the JSON-schema definition for every listed tool, since that's
 what actually gets passed to the model.
 
-Each row gets used twice. First, its prompt and tool list go into
-Mistral's chat template with `tools=[...]` and the model generates a
-response. That response is checked deterministically: parse out the tool
-call it made, compare the name and arguments against the row's
-`correct_tool_name` and `correct_args`, exact match on both is a pass,
-anything else is a fail. That's the only thing deciding success or
-failure anywhere in this write-up, no model involved in the judgment.
+This dataset backs two separate checks on every generated response: a
+deterministic checker, and an LLM judge.
 
-Second, that same generated response is also handed to an LLM judge, to
-score whether it's actually a good response, not just a technically
-correct one, since a call can pass the deterministic check and still
-read badly. How that judge works is next.
+**Deterministic checker.** The model generates a response from the row's
+prompt and tools. The checker parses out the tool call it made and
+compares it to `correct_tool_name` and `correct_args`. Exact match on
+both is a pass, anything else a fail. This is the only thing deciding
+whether a response is instruction-following-correct.
+
+**LLM judge.** The same response is also scored for quality, separately,
+since a technically correct tool call can still read badly to a user.
+The dataset has no ground truth for that, it's judged fresh each time.
+
+The checker's pass/fail is what the linear probes below are trained to
+predict. The judge only enters later, as part of representation
+engineering's quality gate.
 
 ## Engineering an LLM Judge
 
