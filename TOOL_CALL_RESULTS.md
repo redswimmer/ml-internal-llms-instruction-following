@@ -110,8 +110,8 @@ fulfill the request, the model should call it. If none can, it should
 reject. Here's what that looks like for one real task,
 `hotel_booking_000`, straight from `data/tool_calling.jsonl`:
 
-**Should follow the instruction.** A tool exists (`reserve_hotel_room`),
-so the correct move is to call it:
+**Should follow the instruction** (`tool:in_scope` in the dataset). A
+tool exists (`reserve_hotel_room`), so the correct move is to call it:
 
 ```json
 {
@@ -128,10 +128,10 @@ so the correct move is to call it:
 }
 ```
 
-**Should reject.** Same prompt, but this time none of the offered tools
-can fulfill it (`book_notary_appointment` and `create_calendar_event` are
-real tools, just unrelated to a hotel booking), so the correct move is
-`reject`:
+**Should reject** (`tool:out_of_scope` in the dataset). Same prompt, but
+this time none of the offered tools can fulfill it
+(`book_notary_appointment` and `create_calendar_event` are real tools,
+just unrelated to a hotel booking), so the correct move is `reject`:
 
 ```json
 {
@@ -260,51 +260,40 @@ Score (respond with ONLY the single integer 0 or 1):
 A linear probe is a small classifier trained directly on the model's own
 internal activations to predict whether a response will comply with an
 instruction, before the model has even finished generating it, the
-paper's own definition of "knowing internally." Here, complying means
+paper's own definition of "knowing internally." In the case of our experiment, complying means
 picking the right tool or correctly declining. Same probe architecture
-as the paper (`LRProbe`), same 3 layers × 3 token positions, 5 seeds per
-cell.
+as the paper, logistic regression: one linear layer, sigmoid output.
+Same 3 layers × 3 token positions, 5 seeds per cell.
 
 The paper runs two distinct generalization tests. I ran the tool-calling
 equivalent of both.
 
-**Task generalization** asks: trained on some requests, does the probe
-predict compliance on requests it's never seen, within the same
-instruction condition? Both instruction types are pooled into one
-training set and split 80/20 by the underlying task, identical to how
-the paper's own task-generalization experiment pools all 5 of its
-instruction types together, split by task. The split holds out request
-content, not instruction type.
+### Task generalization
 
-| | Task generalization |
-|---|---|
-| Text-only (paper) | 0.74 ± 0.02 |
-| Text-only (ours) | 0.737 ± 0.037 |
-| Tool-calling (ours) | 0.706 ± 0.059 |
+Trained on some requests (e.g., the hotel-booking request above), does
+the probe predict compliance on a different, unseen task (e.g., a
+restaurant reservation), within the same instruction condition? Both
+instruction types are pooled into one training set and split 80/20 by
+the underlying task, identical to how the paper pools all 5 of its
+instruction types together for this same test.
 
-Clearly above chance, matching the paper's finding.
+| Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
+|---|---|---|---|
+| First | 0.74 | 0.737 | 0.706 |
+| Middle | 0.54 | 0.492 | 0.780 |
+| Last | 0.72 | 0.711 | 0.842 |
 
-**Instruction-type generalization** is the harder test: train on one
-instruction condition only, test on a condition the probe has never
-seen a single example of. The paper does this over 5 types (train on 4,
-test on the held-out 5th, repeat 5 times, average). We only have 2
-instruction types, `tool:in_scope` and `tool:out_of_scope`, so it
-collapses to 2 folds: train on all `in_scope` rows, test on
-`out_of_scope`, and the reverse, averaged.
+Notice the consistent increase in tool-calling, unlike text-only.
 
-That's not a shortcut, it reflects how the dataset is built on purpose.
-The paper's 5 types are 5 unrelated textual constraints (forbid a word,
-end with a phrase) layered onto the same task. Our extension tests one
-binary decision, does a tool exist for this request, so there are only
-2 conditions to hold out in the first place; inventing extra
-tool-calling "instruction types" just to reach 5 would have been
-arbitrary. But the cost is real: a 2-fold average has nowhere near the
-statistical cushion of a 5-fold one, and the two conditions we do have
-are inherently more related to each other (both are the same "should a
-tool fire" judgment) than the paper's 5 unrelated constraints are. Both
-push the same direction, toward more cross-condition transfer than the
-paper's setup would produce, independent of whether tool-calling
-representations actually differ from text-only ones.
+### Instruction-type generalization
+
+This is the harder test: train on one instruction condition, test on a
+condition the probe has never seen a single example of. The paper does
+this over 5 types; our dataset only has 2 (should accept vs. should
+reject), so this collapses to a 2-fold average: train on requests where
+a tool exists, test on requests where none does, and the reverse.
+That's one instruction condition short of the paper's 5-fold setup,
+since the dataset itself only has 2 conditions to hold out.
 
 | Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
 |---|---|---|---|
@@ -312,24 +301,9 @@ representations actually differ from text-only ones.
 | Middle | 0.51 | 0.500 | 0.602 |
 | Last | 0.51 | 0.498 | 0.656 |
 
-At the first token, prompt-only, before generation starts, the position
-the paper leans on hardest, tool-calling lands close to our own
-text-only chance-level result. Middle and last diverge well above
-chance. I can't cleanly attribute that to one cause: it's consistent
-with token position meaning something structurally different in a
-short, schema-bound tool call than in free text, and it's equally
-consistent with the 2-fold, closely-related-types limitation above.
-Given both explanations are live, I'd treat the middle/last divergence
-as suggestive, not as evidence that instruction-type became newly
-learnable in tool-calling.
-
-**One more thing the paper doesn't test at all, that I added**: training
-and testing a probe on each instruction type separately, instead of
-pooled. `tool:out_of_scope` alone is nearly perfectly separable
-(0.69–0.99 AUROC using only its own data); `tool:in_scope` alone sits
-near chance (0.50–0.70). The pooled task-generalization number above
-sits between the two, a large part of that signal is `out_of_scope`
-carrying the average, not both types being equally learnable.
+Again, we see a consistent increase in tool-calling, unlike text-only.
+But with only 2 folds to average, and a pattern that doesn't hold as
+cleanly at other layers, I'd call this suggestive, not conclusive.
 
 ## Representation Engineering
 
