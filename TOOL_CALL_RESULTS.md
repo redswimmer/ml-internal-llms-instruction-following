@@ -257,20 +257,83 @@ Score (respond with ONLY the single integer 0 or 1):
 
 ## Linear Probes
 
-- One-line method recap — identical to the paper's (same model, layers,
-  token positions).
-- Comparison table repeated/expanded from Key Findings.
-- The nuance: instruction-type generalization mostly replicates the
-  paper's at-chance result at the most comparable cell (first token,
-  prompt-only) and only diverges at token positions that mean something
-  structurally different in a short tool-call response vs. free text.
+A linear probe is a small classifier trained directly on the model's own
+internal activations to predict whether a response will comply with an
+instruction, before the model has even finished generating it, the
+paper's own definition of "knowing internally." Here, complying means
+picking the right tool or correctly declining. Same procedure as the
+paper: `LRProbe`, same 3 layers × 3 tokens, 5 seeds, verified identical
+to what we used throughout this project so any difference below is
+signal, not pipeline drift.
+
+| | Task generalization | Instruction-type generalization |
+|---|---|---|
+| Text-only (paper) | 0.74 ± 0.02 | 0.50 ± 0.05 |
+| Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
+| Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
+
+The nuance is in token position. Instruction-type generalization by
+token (early layer):
+
+| Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
+|---|---|---|---|
+| First | 0.50 | 0.538 | 0.555 |
+| Middle | 0.51 | 0.500 | 0.602 |
+| Last | 0.51 | 0.498 | 0.656 |
+
+First token (prompt-only, the position the paper itself emphasizes)
+matches our text-only run's chance-level result almost exactly. Middle and last
+diverge well above chance, likely because they mean something
+structurally different in a short, schema-bound tool call versus free
+text, not because instruction-type actually became learnable there.
+
+One more real wrinkle: pooling both instruction types together (needed
+to match the paper's own procedure) hides a big split. `tool:out_of_scope`
+alone is nearly perfectly separable (0.69–0.99 AUROC on its own data),
+`tool:in_scope` alone is near chance (0.50–0.70). The pooled numbers
+above sit between the two, don't read them as both types being equally
+learnable.
 
 ## Representation Engineering
 
-- One-line method recap — identical hook mechanics to the paper's.
-- Headline: RE does not transfer to tool-calling — framed as a checked
-  null (statistical power addressed directly), with the mechanistic
-  reason, not just a flat number.
+**The paper's construction:** `R_updated = R_original + alpha * D`,
+where `D` is the unit-normalized weight vector of a linear probe trained
+on the full dataset, rescaled by the projection of the success-minus-
+failure activation mean-difference onto it. Applied via a forward hook
+at the first token, last layer, always against a magnitude-matched
+random-direction control.
+
+**Our deviation:** `D = mean_diff_direction`, the raw success-minus-
+failure activation mean, not the paper's probe-weight construction. This
+isn't a stylistic swap, the paper's literal construction was tested here
+too and it's a total no-op: the probe-weight direction comes out ~6.4x
+smaller in magnitude than mean-diff's (norm 5.6 vs. 36.1), and at the
+paper's own alpha (0.15) it produces 160/160 tool-calling rows
+byte-identical to the unmodified original, same for all 480
+magnitude-matched random-direction rows at that scale. The identical
+zero-effect pattern was already found independently on our text-only
+RE run first, this is a second, unrelated dataset confirming
+it's a general property of that construction, not a fluke. Consistent
+with Marks & Tegmark's finding that mass-mean directions often
+outperform logistic-regression-weight directions for causal steering.
+
+| | SR | QR | SCR | SPR |
+|---|---|---|---|---|
+| Original | 0.338 | 0.806 | — | — |
+| Random | 0.340 | 0.807 | 0.004 | 1.000 |
+| Instruction-follow (mean-diff) | 0.325 | 0.800 | 0.000 | 0.970 |
+
+**Headline: RE does not transfer to tool-calling.** The paper's own gate
+(instruction-follow SR must beat both original and random) fails,
+instruction-follow SR is the *lowest* of the three, and SCR is 0.000,
+zero originally-failing rows converted, out of 160. Not underpowered: if
+tool-calling RE converted failures at even a quarter of our text-only
+run's rate, seeing 0/160 by chance has probability ~3×10⁻¹⁷.
+
+Mechanistically this is active harm, not inertness: mean-diff visibly
+perturbs generation (confirmed qualitatively), it just never turns a
+failure into a success, while progressively breaking already-correct
+rows at higher alpha (SPR dropping).
 
 ## Conclusion
 
