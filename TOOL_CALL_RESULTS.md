@@ -211,22 +211,18 @@ flowchart TD
     D -->|Yes| E[Promote Luna to production judge]
 ```
 
-Both tool-calling judges are deliberately blind to the tool call itself.
-They never see the tool name, the JSON arguments, or whether the correct
-tool was called, that's the deterministic checker's job, entirely
-separate. What each judge sees instead is natural-language text
-extracted from the response after the tool call: for the comply judge,
-whatever sentence the model wrote confirming the action; for the decline
-judge, the `reject` tool's optional `message` argument plus any trailing
-text. That extraction happens before the prompt below is ever built,
-`{output}` and `{decline_text}` are already that stripped text, never
-the raw `[TOOL_CALLS]` response.
+### LLM Judge Roles
 
-**Should comply.** Used whenever the correct tool exists and the model is
-expected to call it (94.4% agreement against a hand-labeled holdout,
-after one recalibration, the original criterion read "I've booked your
-reservation" as a dishonest claim the model can't back up, when that's
-the correct, checker-verified answer):
+Each judge has its own job, scored against explicit pass/fail criteria
+instead of a vibe: the comply judge checks the model's confirmation, the
+decline judge checks its refusal. Neither judges tool usage, the checker
+already handled that. Both only ever see the model's own written
+explanation, never the tool call itself.
+
+#### Should Comply
+
+Used whenever the correct tool exists and the model is
+expected to call it:
 
 ```
 You are evaluating the quality of a response confirming that a requested action was taken via a tool call. Score 1 only if ALL of the following are true, otherwise score 0. Do NOT provide any explanation for your evaluation.
@@ -242,9 +238,9 @@ Criteria:
 # Score of the Output (Your response must be ONLY the single integer 0 or 1, with no words, punctuation, or explanation):
 ```
 
-**Should reject.** Used whenever no offered tool can fulfill the request
-and the model is expected to decline (passed a direct audit unchanged,
-no recalibration needed):
+#### Should Reject
+Used whenever no offered tool can fulfill the request
+and the model is expected to decline:
 
 ```
 You are evaluating whether a response declines a request the system cannot fulfill.
