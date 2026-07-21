@@ -4,17 +4,17 @@
 
 The authors of the paper [Do LLMs "know" internally when they follow
 instructions?](https://arxiv.org/abs/2410.14516) found that LLMs often
-"internally know" whether they'll follow an instruction before they
+"know" whether they'll follow an instruction before they
 write a word of the response, a linear probe on the model's own
 activations predicts success, and nudging the representation along that
 direction improves compliance without hurting quality.
 
 I wanted to recreate this paper and take its own agent framing further.
-It already motivates itself around building reliable LLM agents and
+It already frames itself around building reliable LLM agents and
 instruction following, but its actual experiments never leave free-text
 generation: write a resume, avoid these keywords, end with this phrase.
 I gave the model real tools to work with. Tools are just the mechanism
-for following the instruction, an agent either has the right capability
+for following the instruction, an agent either has the right tool
 for a request or it doesn't, and getting that judgment wrong (guessing
 instead of declining) is arguably more dangerous than writing a mediocre
 paragraph. I wanted to see if the same "internal knowing" the paper
@@ -31,8 +31,7 @@ real tool-calling support, on an RTX 4090 (24GB VRAM), and stuck with
 their model rather than a newer one like Qwen to keep the comparison
 direct. 
 
-I'm not planning to go into detail on the initial recreation.
-This report will mainly focus on the LLMs accept/reject decision, and
+I'm not planning to go into detail on the initial text-only recreation of the paper and instead focus on the LLMs accept/reject decision, and
 tool calling as the mechanism for testing it.
 
 ### Contributions
@@ -47,12 +46,13 @@ tool calling as the mechanism for testing it.
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
   Replaced it with a binary pass/fail design run by a small, fast model
-  (`GPT 5.6 Luna`), validated against a much stronger reference model
+  (`GPT 5.6 Luna`), which I aligned and validated against a much stronger reference model
   (`Claude Sonnet 5`) before trusting it.
 
 ### Key Findings
 
-**Does the model know before it acts?** A probe on the model's own
+#### Does the model know before it acts?
+A probe on the model's own
 activations, tested on tool-calling requests it never saw during
 training, predicts whether it'll pick the right tool or correctly
 decline, well above the 0.50 chance level:
@@ -65,33 +65,26 @@ decline, well above the 0.50 chance level:
 
 Text-only (ours) is my own recreation of the paper's experiment: same
 model, same method, run on my own hardware with my own seeds. It lands
-close to their published numbers, not exactly on them. That's expected
-for an independent rerun, and it's the reproduction check I did before
-extending anything. Tool-calling (ours) runs that identical pipeline on
-tool-calling requests instead of free text, so that's the comparison
-that's actually fair.
+close to their published numbers, not exactly on them. Tool-calling (ours) runs that identical pipeline,
 
-**Can that knowledge be steered?** In the paper, nudging the model's
+#### Can that knowledge be steered?
+In the paper, nudging the model's
 representation toward "success" raised how often it actually succeeded.
 I found it doesn't, in tool-calling:
 
-| | Original SR | Random SR | Inst-follow SR |
+| | Original SR | Random SR | Instruction-follow SR |
 |---|---|---|---|
 | Text-only (paper) | 0.58 ± 0.00 | 0.56 ± 0.02 | 0.64 ± 0.02 |
 | Text-only (ours) | 0.525 ± 0.00 | 0.533 ± 0.004 | 0.570 ± 0.00 |
 | Tool-calling (ours) | 0.338 ± 0.00 | 0.340 ± 0.003 | 0.325 ± 0.00 |
 
-Original and Inst-follow are truly deterministic on my side, greedy
+Original and Instruction-follow are truly deterministic on my side, greedy
 decoding against a fixed direction, so ± 0.00 is exact, not just one
-run. The paper's own Inst-follow std comes from retraining their probe
+run. The paper's own Instruction-follow std comes from retraining their probe
 per seed; my direction is a closed-form mean-difference vector instead
 (why, in Representation Engineering below), so there's no seed variance
 left to average there.
 
-Same logic here. Text-only (ours) is the recreated experiment, and the
-gap between it and the paper's own numbers comes from my own judge and
-my own tuned direction, not from tool calling. The real comparison is
-Text-only (ours) against Tool-calling (ours), same pipeline both times.
 The model still "knows" in tool-calling. If anything it knows more
 strongly than in the paper's original setting. But steering that
 knowledge doesn't transfer. The instruction direction drops below both
@@ -100,11 +93,71 @@ both. Both results, and why, are covered below.
 
 ## Extending the Dataset
 
-- Design principles inherited directly from the paper: paired task
-  families, 100% deterministic checking, kept to a small number of
-  simple, unambiguous instruction types on purpose.
-- One worked example family, in-scope vs. out-of-scope side by side.
-- Scale and pass rates (100 families, 200 rows, 68% / 20%).
+I built this [dataset](data/tool_calling.jsonl) the same way the paper builds IFEval-simple: pair
+every instruction condition against the same set of tasks, so a probe's
+signal can be attributed to the instruction, not incidental task
+content. Here's how the two line up:
+
+| | Paper (IFEval-simple) | Tool-Calling (ours) |
+|---|---|---|
+| Task, held fixed per pair | request content, e.g. "write a resume" | request content, e.g. "reserve a hotel room for Jordan Lee" |
+| What varies | textual constraint, e.g. "avoid these keywords" | tool menu: whether a tool exists to fulfill the request |
+| Scoring | deterministic checker | deterministic checker |
+
+In practice: both rows in a pair ask for the exact same thing, word for
+word. What changes is only the tools on offer. If one of them can
+fulfill the request, the model should call it. If none can, it should
+reject. Here's what that looks like for one real task,
+`hotel_booking_000`, straight from `data/tool_calling.jsonl`:
+
+**Should follow the instruction.** A tool exists (`reserve_hotel_room`),
+so the correct move is to call it:
+
+```json
+{
+  "prompt": "Please reserve a standard king room at the Harborview Grand Hotel for Jordan Lee, checking in on July 20, 2026 and checking out on July 23, 2026; I need a regular hotel room, not a suite.",
+  "tools": ["reserve_hotel_room", "reject", "reserve_hotel_suite"],
+  "correct_tool_name": "reserve_hotel_room",
+  "correct_args": {
+    "hotel_name": "Harborview Grand Hotel",
+    "room_type": "standard king room",
+    "check_in_date": "July 20, 2026",
+    "check_out_date": "July 23, 2026",
+    "guest_name": "Jordan Lee"
+  }
+}
+```
+
+**Should reject.** Same prompt, but this time none of the offered tools
+can fulfill it (`book_notary_appointment` and `create_calendar_event` are
+real tools, just unrelated to a hotel booking), so the correct move is
+`reject`:
+
+```json
+{
+  "prompt": "Please reserve a standard king room at the Harborview Grand Hotel for Jordan Lee, checking in on July 20, 2026 and checking out on July 23, 2026; I need a regular hotel room, not a suite.",
+  "tools": ["reject", "book_notary_appointment", "create_calendar_event"],
+  "correct_tool_name": "reject",
+  "correct_args": {}
+}
+```
+
+Note: Trimmed to the fields that matter here; each row's full JSON also
+carries the JSON-schema definition for every listed tool, since that's
+what actually gets passed to the model.
+
+Each row gets used twice. First, its prompt and tool list go into
+Mistral's chat template with `tools=[...]` and the model generates a
+response. That response is checked deterministically: parse out the tool
+call it made, compare the name and arguments against the row's
+`correct_tool_name` and `correct_args`, exact match on both is a pass,
+anything else is a fail. That's the only thing deciding success or
+failure anywhere in this write-up, no model involved in the judgment.
+
+Second, that same generated response is also handed to an LLM judge, to
+score whether it's actually a good response, not just a technically
+correct one, since a call can pass the deterministic check and still
+read badly. How that judge works is next.
 
 ## Engineering an LLM Judge
 
