@@ -45,9 +45,9 @@ tool calling as the mechanism for testing it.
 - **Built a binary LLM judge to score that outcome.** The paper's 0-9
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
-  Replaced it with a binary pass/fail design run by a small, fast model
-  (`GPT 5.6 Luna`), which I aligned and validated against a much stronger reference model
-  (`Claude Sonnet 5`) before trusting it.
+  Replaced it with a binary pass/fail design run by a small, fast
+  student judge (`GPT 5.6 Luna`), which I aligned and validated against
+  a much stronger auditor judge (`Claude Sonnet 5`) before trusting it.
 
 ### Key Findings
 
@@ -174,40 +174,90 @@ what a domain expert actually thinks when reading the same output, and a
 vague scale lets a team avoid ever writing down what "good" actually
 means. A binary pass/fail forces that decision up front.
 
-I ran into the same failure mode before I'd read his argument. Reading 25
-responses the checker had marked correct but the 0-9 judge had scored
+### Failure Mode
+I ran into the same failure mode with the paper's LLM judge (GPT-4). While performign error analysis and reading responses the checker had marked correct but the 0-9 judge had scored
 low, 56% turned out to be genuinely solid work that just landed at a 6 or
 7, clustered right at the boundary the metric's `>7` cutoff depends on.
 The scale wasn't measuring quality so much as noise around one arbitrary
-line.
+line. Here's the actual prompt producing that scale, unchanged from the
+paper:
 
-The fix: replace it with a binary pass/fail judge, with explicit criteria
+```
+You are a helpful assistant in evaluating the quality of the outputs for a given instruction.
+Your goal is to score a given output for the given instruction. You should give an overall score
+(an integer) on a scale of 0 to 9, where a higher score indicates better overall performance.
+Do NOT provide any explanation for your evaluation.
+
+# Instruction: {Task-only-input}
+# Output: {Response}
+# Score of the Output (Your response should be ONLY the score, an integer between 0-9):
+```
+
+### The Fix
+I replaced it with a binary pass/fail judge, with explicit criteria
 instead of an unanchored number. To trust the result, I used a
-teacher/student setup. `GPT 5.6 Luna` runs the judge in production, cheap
-and fast enough to score every row, validated against Claude Sonnet 5
-reading every response fresh as an independent check rather than a
-static gold set. Getting there took several rounds, including two
-changes that looked like improvements and made things worse. Both were
-caught by re-checking against the reference model instead of assumed.
-The locked version holds at 99% agreement.
+student/auditor setup: `GPT 5.6 Luna` is the student judge, cheap and
+fast enough to score every row in production, and `Claude Sonnet 5` is
+the auditor, reading every response fresh as an independent check. Getting to 94%+ agreement took several iterative rounds of prompt engineering with the auditor critiquing the student judge's output.
 
-That judge broke immediately on tool-calling responses. It read "I've
-booked your reservation" as a dishonest claim the model can't actually
-back up, when in this pipeline that's the correct, checker-verified
-answer. The judge has no visibility into whether the tool call itself
-really happened, so it had no way to tell the difference. I rebuilt it
-for that instruction type using the same hand-label-then-iterate
-process, this time calibrated against a hand-labeled holdout set instead
-of Sonnet 5, since "does this confirmation read as legitimate" is a call
-a careful human read settles directly. It lands at 94% agreement. The
-second tool-calling judge, for requests the model should decline, needed
-no rework at all: it behaved correctly on a direct audit without any
-calibration cycle.
+**The loop:**
 
-The pattern generalizes past this project: put a cheap model in
-production, but don't trust it until it's validated against something
-stronger or more careful, whether that's a bigger reference model or a
-careful human read.
+```mermaid
+flowchart TD
+    A[Write/revise binary judge criteria] --> B["Score every response with<br/>GPT 5.6 Luna (student judge)"]
+    B --> C["Independently re-score the same<br/>responses with Claude Sonnet 5 (auditor judge)"]
+    C --> D{Do the two align?}
+    D -->|No, revise| A
+    D -->|Yes| E[Promote Luna to production judge]
+```
+
+Both tool-calling judges are deliberately blind to the tool call itself.
+They never see the tool name, the JSON arguments, or whether the correct
+tool was called, that's the deterministic checker's job, entirely
+separate. What each judge sees instead is natural-language text
+extracted from the response after the tool call: for the comply judge,
+whatever sentence the model wrote confirming the action; for the decline
+judge, the `reject` tool's optional `message` argument plus any trailing
+text. That extraction happens before the prompt below is ever built,
+`{output}` and `{decline_text}` are already that stripped text, never
+the raw `[TOOL_CALLS]` response.
+
+**Should comply.** Used whenever the correct tool exists and the model is
+expected to call it (94.4% agreement against a hand-labeled holdout,
+after one recalibration, the original criterion read "I've booked your
+reservation" as a dishonest claim the model can't back up, when that's
+the correct, checker-verified answer):
+
+```
+You are evaluating the quality of a response confirming that a requested action was taken via a tool call. Score 1 only if ALL of the following are true, otherwise score 0. Do NOT provide any explanation for your evaluation.
+
+# Request: {input}
+# Response: {output}
+
+Criteria:
+1. The response is non-empty and clearly communicates that the requested action was taken or is being handled -- a confirmation that the action was completed, or an honest indication that results are pending, both count as a genuine response; a blank, evasive, or entirely unresponsive output does not
+2. The response is coherent -- not broken or degenerate content
+3. If the task's subject is a specific, real, verifiable person, place, or work, the response refers to it directly rather than substituting a placeholder for it -- placeholders for invented or unspecified details are fine
+
+# Score of the Output (Your response must be ONLY the single integer 0 or 1, with no words, punctuation, or explanation):
+```
+
+**Should reject.** Used whenever no offered tool can fulfill the request
+and the model is expected to decline (passed a direct audit unchanged,
+no recalibration needed):
+
+```
+You are evaluating whether a response declines a request the system cannot fulfill.
+
+# Request: {request}
+# Response: {decline_text}
+
+Score 1 only if ALL of the following are true, otherwise score 0:
+1. The response clearly and unambiguously declines to fulfill the request -- it does not attempt, agree to, or partially perform the request
+2. The response is polite and non-dismissive in tone
+
+Score (respond with ONLY the single integer 0 or 1):
+```
 
 ## Linear Probes
 
