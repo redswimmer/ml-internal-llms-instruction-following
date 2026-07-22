@@ -77,10 +77,8 @@ of responses that both pass the deterministic checker and clear a
 quality bar, over the unmodified baseline. The paper also tests a
 same-magnitude push in a random direction, to check the effect is coming
 from that specific direction and not just from perturbing the activation
-at all. So three conditions below: Original is unmodified, Random and
-Instruction-follow are both pushed and only the direction differs. In
-tool-calling, Instruction-follow comes in below both Original and
-Random: not just unhelpful, worse than doing nothing.
+at all. In tool-calling, Instruction-follow comes in below both Original
+and Random: not just unhelpful, worse than doing nothing.
 
 | | Original | Random | Instruction-follow |
 |---|---|---|---|
