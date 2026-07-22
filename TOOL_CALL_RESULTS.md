@@ -66,9 +66,10 @@ chance, consistent with the paper's own result:
 
 ![AUROC comparison: task generalization is well above chance for the paper and both of our runs. Instruction-type generalization stays close to chance across all three.](assets/fig1_auroc_headline.png)
 
-Text-only (ours) is my own recreation of the paper's experiment: same
-model, same method, run on my own hardware with my own seeds. It lands
-close to their published numbers, not exactly on them. Tool-calling (ours) runs that identical pipeline,
+Text-only (ours) lands close to the paper's published numbers, not
+exactly on them, which is expected given different hardware and seeds.
+Tool-calling (ours) is that identical pipeline, run on the tool-calling
+dataset instead.
 
 #### Can that knowledge be steered?
 In the paper, nudging the model's representation along what it calls the
