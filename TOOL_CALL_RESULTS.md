@@ -74,10 +74,13 @@ dataset instead.
 In the paper, nudging the model's representation along what it calls the
 "instruction-following direction" raised the success rate, the fraction
 of responses that both pass the deterministic checker and clear a
-quality bar. To check the effect is coming from that specific direction
-and not just from perturbing the activation at all, the paper also
-compares against nudging by the same amount in a random direction. I
-found the instruction-following direction doesn't help, in tool-calling.
+quality bar, over the unmodified baseline. The paper also tests a
+same-magnitude push in a random direction, to check the effect is coming
+from that specific direction and not just from perturbing the activation
+at all. So three conditions below: Original is unmodified, Random and
+Instruction-follow are both pushed and only the direction differs. In
+tool-calling, Instruction-follow comes in below both Original and
+Random: not just unhelpful, worse than doing nothing.
 
 | | Original | Random | Instruction-follow |
 |---|---|---|---|
