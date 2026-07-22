@@ -46,8 +46,8 @@ tool calling as the mechanism for testing it.
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
   Replaced it with a binary pass/fail design run by a small, fast
-  student judge (`GPT 5.6 Luna`), which I aligned and validated against
-  a much stronger auditor judge (`Claude Sonnet 5`) before trusting it.
+  student judge (`GPT 5.6 Luna`), which I iterativly aligned and validated against
+  a much stronger auditor judge (`Claude Sonnet 5`) before promoting it to the production judge.
 
 ### Key Findings
 
