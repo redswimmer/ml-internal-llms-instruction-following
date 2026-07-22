@@ -69,10 +69,11 @@ close to their published numbers, not exactly on them. Tool-calling (ours) runs 
 
 #### Can that knowledge be steered?
 In the paper, nudging the model's
-representation toward "success" raised how often it actually succeeded.
-I found it doesn't, in tool-calling:
+representation toward "success" raised its success rate: the fraction
+of responses that both pass the deterministic checker and clear a quality
+bar. I found it doesn't, in tool-calling:
 
-| | Original SR | Random SR | Instruction-follow SR |
+| | Original | Random | Instruction-follow |
 |---|---|---|---|
 | Text-only (paper) | 0.58 ± 0.00 | 0.56 ± 0.02 | 0.64 ± 0.02 |
 | Text-only (ours) | 0.525 ± 0.00 | 0.533 ± 0.004 | 0.570 ± 0.00 |
@@ -307,52 +308,80 @@ cleanly at other layers, I'd call this suggestive, not conclusive.
 
 ## Representation Engineering
 
-**The paper's construction:** `R_updated = R_original + alpha * D`,
-where `D` is the unit-normalized weight vector of a linear probe trained
-on the full dataset, rescaled by the projection of the success-minus-
-failure activation mean-difference onto it. Applied via a forward hook
-at the first token, last layer, always against a magnitude-matched
-random-direction control.
+Steer the model at inference time: nudge its internal activation a fixed
+amount along a chosen direction, then let generation continue.
 
-**Our deviation:** `D = mean_diff_direction`, the raw success-minus-
-failure activation mean, not the paper's probe-weight construction. This
-isn't a stylistic swap, the paper's literal construction was tested here
-too and it's a total no-op: the probe-weight direction comes out ~6.4x
-smaller in magnitude than mean-diff's (norm 5.6 vs. 36.1), and at the
-paper's own alpha (0.15) it produces 160/160 tool-calling rows
-byte-identical to the unmodified original, same for all 480
-magnitude-matched random-direction rows at that scale. The identical
-zero-effect pattern was already found independently on our text-only
-RE run first, this is a second, unrelated dataset confirming
-it's a general property of that construction, not a fluke. Consistent
-with Marks & Tegmark's finding that mass-mean directions often
-outperform logistic-regression-weight directions for causal steering.
+**The paper's direction** is built in two steps:
 
-| | SR | QR | SCR | SPR |
+```
+mean_diff = mean(activations on successes) - mean(activations on failures)
+paper_direction = the part of mean_diff that points along the probe's own weight vector
+                   (i.e. drop whatever part of mean_diff the probe didn't learn to key on)
+```
+
+**Our direction** skips the second step and uses `mean_diff` as-is. Not a
+stylistic choice, I tested the paper's version directly and it's a total
+no-op. Keeping only "the part that points along the probe" can only
+shrink a vector, never grow it, and here it shrinks it enough that at the
+paper's tuned push strength, every single response came out
+character-for-character identical to the unmodified original, true for
+the real direction *and* for its random-direction control. That's as
+clean a null result as a no-op gets. (Consistent with Marks & Tegmark's
+finding that mass-mean directions often outperform logistic-regression-
+weight directions for causal steering.)
+
+Both directions are applied the same way: `R_updated = R_original + alpha
+* D`, via a forward hook at the first token, last layer, against a
+magnitude-matched random-direction control. Alpha = 0.3 for the run
+below, reused from the text-only experiment's own tuned value, a sweep on
+this dataset didn't find anything better.
+
+| | Success rate | Quality rate | Fixed failures | Kept successes |
 |---|---|---|---|---|
 | Original | 0.338 | 0.806 | — | — |
 | Random | 0.340 | 0.807 | 0.004 | 1.000 |
 | Instruction-follow (mean-diff) | 0.325 | 0.800 | 0.000 | 0.970 |
 
-**Headline: RE does not transfer to tool-calling.** The paper's own gate
-(instruction-follow SR must beat both original and random) fails,
-instruction-follow SR is the *lowest* of the three, and SCR is 0.000,
-zero originally-failing rows converted, out of 160. Not underpowered: if
-tool-calling RE converted failures at even a quarter of our text-only
-run's rate, seeing 0/160 by chance has probability ~3×10⁻¹⁷.
+*Same four metrics the paper reports: quality rate is the share of
+checker-correct responses that also clear the quality bar; fixed failures
+is the share of originally-failing rows RE turned into passes; kept
+successes is the share of originally-passing rows RE left passing.*
 
-Mechanistically this is active harm, not inertness: mean-diff visibly
-perturbs generation (confirmed qualitatively), it just never turns a
-failure into a success, while progressively breaking already-correct
-rows at higher alpha (SPR dropping).
+**RE does not transfer to tool-calling.** Instruction-follow's success
+rate is the *lowest* of the three, the paper's own gate (must beat both
+original and random) fails outright. Not one originally-failing row got
+fixed, and that's not a small-sample fluke, if the push were doing
+anything at all, some fraction of the batch should have flipped; none
+did.
+
+It's active harm, not inertness: the direction visibly perturbs
+generation (confirmed qualitatively), it just never turns a failure into
+a success, while progressively breaking already-correct rows at higher
+alpha (fewer kept successes as the push gets stronger).
 
 ## Conclusion
 
-- Tie back to the motivation: the paper's internal-knowing claim holds up
-  in a harder, more practically relevant setting; the causal-steering
-  half doesn't come along for free — a real boundary condition, not a
-  failure.
-- One forward-looking sentence. No laundry list.
+- **Does the model know when it can't comply?** Yes, clearly. The probe
+  separates accept-from-reject decisions well above chance on requests it
+  never trained on (task generalization up to 0.84 AUROC), and the signal
+  even carries, more weakly, to an instruction type it's never seen a
+  single example of. Before it ever emits a tool call, the model's own
+  activations already distinguish "a tool for this exists" from "none of
+  these tools apply."
+- **Can that knowledge be steered?** No. Nudging the representation
+  toward "success" doesn't raise the tool-calling success rate — it's
+  actively harmful: it never converts a genuine failure into a success,
+  while quietly breaking responses that were already correct. The signal
+  is there; this particular lever doesn't reach it.
+- Together, that's a real dissociation, not a wash: the same internal
+  signal a probe reads off cleanly can't be pushed on directly to change
+  behavior. Practically, that argues for using this as a passive
+  guardrail — a pre-generation check on whether an agent is about to
+  reach for the wrong tool — rather than a live correction mechanism. One
+  thing worth trying next: training the steering direction on the reject
+  cases alone instead of pooling both instruction types together, since
+  accept and reject may need genuinely different pushes, not one shared
+  one.
 
 ## Citation
 
