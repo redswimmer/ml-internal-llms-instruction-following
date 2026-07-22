@@ -68,10 +68,13 @@ model, same method, run on my own hardware with my own seeds. It lands
 close to their published numbers, not exactly on them. Tool-calling (ours) runs that identical pipeline,
 
 #### Can that knowledge be steered?
-In the paper, nudging the model's
-representation toward "success" raised its success rate: the fraction
-of responses that both pass the deterministic checker and clear a quality
-bar. I found it doesn't, in tool-calling:
+In the paper, nudging the model's representation along what it calls the
+"instruction-following direction" raised the success rate, the fraction
+of responses that both pass the deterministic checker and clear a
+quality bar. To check the effect is coming from that specific direction
+and not just from perturbing the activation at all, the paper also
+compares against nudging by the same amount in a random direction. I
+found the instruction-following direction doesn't help, in tool-calling.
 
 | | Original | Random | Instruction-follow |
 |---|---|---|---|
@@ -308,33 +311,57 @@ cleanly at other layers, I'd call this suggestive, not conclusive.
 
 ## Representation Engineering
 
-Steer the model at inference time: nudge its internal activation a fixed
-amount along a chosen direction, then let generation continue.
+Representation engineering is the causal counterpart to probing.
+Probing finds a direction that separates the model's successful
+activations from its failing ones, a correlation. Representation
+engineering tests whether pushing a new activation along that same
+direction can actually cause success, not just predict it. Concretely,
+take the model's internal snapshot at one specific spot (the first
+token, last layer), give it a small push in that direction, then let the
+model generate its response as usual from that nudged starting point.
 
-**The paper's direction** is built in two steps:
+```
+R_updated = R_original + alpha * D
+```
+
+`D` is that direction, `alpha` controls how strong the push is. Full
+mechanics in the [RE paper](https://arxiv.org/abs/2310.01405) cited
+below.
+
+What differs between the paper's version and ours is only how `D` gets
+built. Both start from the same quantity, the average difference between
+the model's activations on successes and on failures.
 
 ```
 mean_diff = mean(activations on successes) - mean(activations on failures)
-paper_direction = the part of mean_diff that points along the probe's own weight vector
-                   (i.e. drop whatever part of mean_diff the probe didn't learn to key on)
 ```
 
-**Our direction** skips the second step and uses `mean_diff` as-is. Not a
-stylistic choice, I tested the paper's version directly and it's a total
-no-op. Keeping only "the part that points along the probe" can only
-shrink a vector, never grow it, and here it shrinks it enough that at the
-paper's tuned push strength, every single response came out
-character-for-character identical to the unmodified original, true for
-the real direction *and* for its random-direction control. That's as
-clean a null result as a no-op gets. (Consistent with Marks & Tegmark's
-finding that mass-mean directions often outperform logistic-regression-
-weight directions for causal steering.)
+**The paper's direction** keeps only the piece of `mean_diff` that lines
+up with the probe's own trained weight vector, a mathematical
+projection, dropping whatever part points some other way.
 
-Both directions are applied the same way: `R_updated = R_original + alpha
-* D`, via a forward hook at the first token, last layer, against a
-magnitude-matched random-direction control. Alpha = 0.3 for the run
-below, reused from the text-only experiment's own tuned value, a sweep on
-this dataset didn't find anything better.
+```
+probe_direction = probe_weight / norm(probe_weight)
+paper_direction = dot(mean_diff, probe_direction) * probe_direction
+```
+
+**Our direction** skips that projection and uses `mean_diff` directly,
+unfiltered.
+
+```
+our_direction = mean_diff
+```
+
+I tested the paper's version directly and it produced no movement at
+all. At its own push strength, every response came out byte-identical to
+the original, for the real direction and its random control alike, a
+projection can only shrink a vector, never grow it, so the push ended up
+too small to matter. I used the plain difference instead, mass-mean
+directions like this tend to beat probe-weight ones for steering
+(Marks & Tegmark). The results below are from that direction.
+
+Alpha = 0.3 for the run below, reused from the text-only experiment's own
+tuned value, a sweep on this dataset didn't find anything better.
 
 | | Success rate | Quality rate | Fixed failures | Kept successes |
 |---|---|---|---|---|
@@ -342,7 +369,7 @@ this dataset didn't find anything better.
 | Random | 0.340 | 0.807 | 0.004 | 1.000 |
 | Instruction-follow (mean-diff) | 0.325 | 0.800 | 0.000 | 0.970 |
 
-*Same four metrics the paper reports: quality rate is the share of
+*Same four metrics the paper reports. Quality rate is the share of
 checker-correct responses that also clear the quality bar; fixed failures
 is the share of originally-failing rows RE turned into passes; kept
 successes is the share of originally-passing rows RE left passing.*
@@ -354,7 +381,7 @@ fixed, and that's not a small-sample fluke, if the push were doing
 anything at all, some fraction of the batch should have flipped; none
 did.
 
-It's active harm, not inertness: the direction visibly perturbs
+It's active harm, not inertness. The direction visibly perturbs
 generation (confirmed qualitatively), it just never turns a failure into
 a success, while progressively breaking already-correct rows at higher
 alpha (fewer kept successes as the push gets stronger).
@@ -369,16 +396,16 @@ alpha (fewer kept successes as the push gets stronger).
   activations already distinguish "a tool for this exists" from "none of
   these tools apply."
 - **Can that knowledge be steered?** No. Nudging the representation
-  toward "success" doesn't raise the tool-calling success rate — it's
-  actively harmful: it never converts a genuine failure into a success,
+  toward "success" doesn't raise the tool-calling success rate, it's
+  actively harmful, it never converts a genuine failure into a success,
   while quietly breaking responses that were already correct. The signal
-  is there; this particular lever doesn't reach it.
-- Together, that's a real dissociation, not a wash: the same internal
+  is there, this particular lever doesn't reach it.
+- Together, that's a real dissociation, not a wash. The same internal
   signal a probe reads off cleanly can't be pushed on directly to change
   behavior. Practically, that argues for using this as a passive
-  guardrail — a pre-generation check on whether an agent is about to
-  reach for the wrong tool — rather than a live correction mechanism. One
-  thing worth trying next: training the steering direction on the reject
+  guardrail, a pre-generation check on whether an agent is about to
+  reach for the wrong tool, rather than a live correction mechanism. One
+  thing worth trying next, training the steering direction on the reject
   cases alone instead of pooling both instruction types together, since
   accept and reject may need genuinely different pushes, not one shared
   one.
@@ -410,5 +437,18 @@ The representation engineering technique used here comes from:
       archivePrefix={arXiv},
       primaryClass={cs.LG},
       url={https://arxiv.org/abs/2310.01405},
+}
+```
+
+The binary judge design was informed by:
+
+```bibtex
+@online{husain2024llmjudge,
+      author  = {Husain, Hamel},
+      title   = {Using {LLM}-as-a-Judge For Evaluation: A Complete Guide},
+      year    = {2024},
+      month   = oct,
+      url     = {https://hamel.dev/blog/posts/llm-judge/},
+      urldate = {2026-07-22},
 }
 ```
