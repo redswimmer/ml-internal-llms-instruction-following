@@ -52,10 +52,15 @@ tool calling as the mechanism for testing it.
 ### Key Findings
 
 #### Does the model know before it acts?
-A probe on the model's own
-activations, tested on tool-calling requests it never saw during
-training, predicts whether it'll pick the right tool or correctly
-decline, well above the 0.50 chance level:
+A probe on the model's own activations, tested on tool-calling requests
+it never saw during training, predicts whether it'll pick the right tool
+or correctly decline. That question splits into two different tests, and
+they don't tell the same story. **Task generalization** -- an unseen
+request, same instruction type the probe trained on -- is well above the
+0.50 chance level across the board. **Instruction-type generalization**
+-- an instruction type the probe has never seen a single example of --
+is a much harder test and stays close to chance for text-only; it's
+still low, just consistently a few points above chance for tool-calling:
 
 | | Task generalization | Instruction-type generalization |
 |---|---|---|
@@ -63,7 +68,7 @@ decline, well above the 0.50 chance level:
 | Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
 | Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
 
-![AUROC comparison: task generalization is well above chance for the paper and both of our runs; instruction-type generalization sits at chance for the paper and text-only, but tool-calling nudges just above it.](assets/fig1_auroc_headline.png)
+![AUROC comparison: task generalization is well above chance for the paper and both of our runs. Instruction-type generalization is a much weaker signal throughout -- at chance for the paper, only a few points above chance for either of our own runs.](assets/fig1_auroc_headline.png)
 
 Text-only (ours) is my own recreation of the paper's experiment: same
 model, same method, run on my own hardware with my own seeds. It lands
