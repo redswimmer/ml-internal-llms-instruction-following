@@ -63,6 +63,8 @@ decline, well above the 0.50 chance level:
 | Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
 | Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
 
+![AUROC comparison: task generalization is well above chance for the paper and both of our runs; instruction-type generalization sits at chance for the paper and text-only, but tool-calling nudges just above it.](assets/fig1_auroc_headline.png)
+
 Text-only (ours) is my own recreation of the paper's experiment: same
 model, same method, run on my own hardware with my own seeds. It lands
 close to their published numbers, not exactly on them. Tool-calling (ours) runs that identical pipeline,
@@ -309,6 +311,27 @@ Again, we see a consistent increase in tool-calling, unlike text-only.
 But with only 2 folds to average, and a pattern that doesn't hold as
 cleanly at other layers, I'd call this suggestive, not conclusive.
 
+![AUROC by token position, task generalization and instruction-type generalization side by side. Paper and text-only stay flat or dip at the middle token; tool-calling climbs steadily from first to last token in both panels.](assets/fig2_token_breakdown.png)
+
+One layer deeper: task generalization above pools `tool:in_scope` and
+`tool:out_of_scope` into one training set, same as the paper pools all 5
+of its instruction types. Pooling is the right call for comparing against
+the paper, but it hides how unevenly separable the two actually are on
+their own. Breaking the same experiment out by type tells a different
+story:
+
+![Task-generalization AUROC, pooled versus split by instruction type, at the early layer across all three token positions. tool:out_of_scope is almost perfectly separable on its own; tool:in_scope sits at or below chance throughout, and the pooled bar sits above both.](assets/fig5_task_gen_masking.png)
+
+`tool:out_of_scope`, the 20%-positive minority, is the type a probe reads
+almost perfectly (up to 0.99 AUROC by the last token). `tool:in_scope`,
+the 68%-positive majority, is the weak one, sitting at chance for most of
+the grid. That's the opposite of what I expected going in: with roughly a
+third as many positive examples, I assumed `out_of_scope` would be the
+harder type to learn, not the easier one. It means the pooled numbers
+above, while the correct comparison to the paper's own pooled setup,
+overstate how separable `tool:in_scope` specifically is — most of the
+pooled signal is `out_of_scope` carrying the average up.
+
 ## Representation Engineering
 
 Representation engineering is the causal counterpart to probing.
@@ -400,6 +423,8 @@ checkable in one place.
 </tr>
 </table>
 
+![Success rate and quality ratio across Original, Random, and Instruction-follow conditions, compared across the paper, our text-only run, and our tool-calling run. The paper and our text-only run both show instruction-follow beating original and random; tool-calling shows the opposite ordering, with instruction-follow the lowest of the three.](assets/fig3_re_sr_qr.png)
+
 **RE does not transfer to tool-calling.** Instruction-follow's success
 rate is the *lowest* of the three, the paper's own gate (must beat both
 original and random) fails outright. Not one originally-failing row got
@@ -419,6 +444,8 @@ generation (confirmed qualitatively), it just never turns a failure into
 a success, while progressively breaking already-correct rows at higher
 alpha (97% of originally-passing rows stayed passing, versus 100% for
 random).
+
+![Success conversion ratio and success preservation ratio for our text-only run versus our tool-calling run. Text-only converts about 1 in 5 failures under instruction-follow; tool-calling converts zero, and also preserves slightly fewer of its already-correct rows than its own random-direction control.](assets/fig4_re_scr_spr.png)
 
 ## Conclusion
 
