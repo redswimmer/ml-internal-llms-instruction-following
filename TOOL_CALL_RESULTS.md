@@ -55,8 +55,8 @@ tool calling as the mechanism for testing it.
 A probe on the model's own activations, tested on tool-calling requests
 it never saw during training, predicts whether it'll pick the right tool
 or correctly decline. Task generalization is well above the 0.50 chance
-level across the board. Instruction-type generalization is a much harder
-test and stays close to chance (details below):
+level across the board. Instruction-type generalization stays close to
+chance, consistent with the paper's own result:
 
 | | Task generalization | Instruction-type generalization |
 |---|---|---|
