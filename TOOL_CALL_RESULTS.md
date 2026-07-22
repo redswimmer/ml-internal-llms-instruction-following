@@ -84,6 +84,8 @@ found the instruction-following direction doesn't help, in tool-calling.
 | Text-only (ours) | 0.525 ± 0.00 | 0.533 ± 0.004 | 0.570 ± 0.00 |
 | Tool-calling (ours) | 0.338 ± 0.00 | 0.340 ± 0.003 | 0.325 ± 0.00 |
 
+![Success rate across Original, Random, and Instruction-follow conditions, for the paper, our text-only recreation, and our tool-calling extension. Paper and text-only both climb left to right; tool-calling is flat-to-declining and ends up lowest at Instruction-follow.](assets/fig1b_re_headline_sr.png)
+
 Original and Instruction-follow are truly deterministic on my side, greedy
 decoding against a fixed direction, so ± 0.00 is exact, not just one
 run. The paper's own Instruction-follow std comes from retraining their probe
