@@ -6,8 +6,9 @@ The authors of the paper [Do LLMs "know" internally when they follow
 instructions?](https://arxiv.org/abs/2410.14516) found that LLMs often
 "know" whether they'll follow an instruction before they
 write a word of the response, a linear probe on the model's own
-activations predicts success, and nudging the representation along that
-direction improves compliance without hurting quality.
+activations predicts success, and nudging the representation along what
+the paper calls the instruction-following direction improves compliance
+without hurting quality.
 
 I wanted to recreate this paper and take its own agent framing further.
 It already frames itself around building reliable LLM agents and
@@ -66,9 +67,7 @@ chance, consistent with the paper's own result:
 
 ![AUROC comparison: task generalization is well above chance for the paper and both of our runs. Instruction-type generalization stays close to chance across all three.](assets/fig1_auroc_headline.png)
 
-Text-only (ours) lands close to the paper's published numbers, not
-exactly on them, which is expected given different hardware and seeds.
-Tool-calling (ours) is that identical pipeline, run on the tool-calling
+Text-only (ours) lands close to the paper's published numbers.  Tool-calling (ours) is that identical pipeline, run on the tool-calling
 dataset instead.
 
 #### Can that knowledge be steered?
@@ -97,7 +96,7 @@ left to average there.
 
 The model still "knows" in tool-calling. If anything it knows more
 strongly than in the paper's original setting. But steering that
-knowledge doesn't transfer. The instruction direction drops below both
+knowledge doesn't transfer. The instruction-following direction drops below both
 original and random, where in the text-only setting it clearly beat
 both. Both results, and why, are covered below.
 
