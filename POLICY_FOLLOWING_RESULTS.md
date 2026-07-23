@@ -214,13 +214,13 @@ write-up. Response quality is judged separately, covered next.
 ## Engineering an LLM Judge
 
 The paper's quality gate asks a judge model to score every response on a
-0-9 scale, with no rubric and no examples, just "give an overall score."
-[Hamel Husain makes a strong case](https://hamel.dev/blog/posts/llm-judge/)
-for why scales like this don't work well in practice: nobody knows what
-to do with a 3 versus a 4, scale scores routinely don't correlate with
-what a domain expert actually thinks when reading the same output, and a
-vague scale lets a team avoid ever writing down what "good" actually
-means. A binary pass/fail forces that decision up front.
+0-9 scale. The prompt includes no rubric and no examples: what separates
+a 3 from a 7 is left entirely to the judge's own discretion, a known
+failure mode for LLM judges. [Hamel Husain makes a strong case](https://hamel.dev/blog/posts/llm-judge/)
+for why scales like this don't work well in practice: the LLM judge
+doesn't know what to do with a 3 versus a 4. A binary pass/fail forces
+that decision up front, and gives the judge a rubric of specific
+criteria to apply instead.
 
 ### Failure Mode
 I ran into the same failure mode reproducing the paper's judge setup,
