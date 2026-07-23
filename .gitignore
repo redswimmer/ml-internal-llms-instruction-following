@@ -161,3 +161,19 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 .DS_Store
+
+# Knowledge handoff between phases/sessions: paper extract, figures, findings,
+# working notes. Not tracked yet - how/what to publish is a decision we're
+# deferring to Phase 9. Includes the copyrighted paper PDF, which shouldn't be
+# redistributed regardless.
+docs/
+
+# Personal instructions to Claude Code (not for public repo)
+CLAUDE.md
+
+# Throwaway scripts, exploratory tests - not meant to be shared
+scratch/
+
+# Local secrets (OPENAI_API_KEY, OPENAI_BASE_URL, etc.)
+.env
+.env.*
