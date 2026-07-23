@@ -52,14 +52,18 @@ policy, and tool calling as the mechanism for testing it.
   the policy of calling the right tool when one applies and declining
   otherwise, rather than guessing?** Built a paired dataset to test
   exactly that: for every request, one variant where a tool exists to
-  fulfill it (policy: call it) and one variant, otherwise identical,
-  where none does (policy: reject).
+  fulfill it, so the model should call it, and one variant, otherwise
+  identical, where no such tool exists, so the model should decline.
 - **Built a binary LLM judge to score that outcome.** The paper's 0-9
-  quality scale has no rubric, a known failure mode for LLM judges, and
-  it broke down right at the cutoff (7) the whole metric depends on.
-  Replaced it with a binary pass/fail design run by a small, fast
-  student judge (`GPT 5.6 Luna`), which I iteratively aligned and validated against
-  a much stronger auditor judge (`Claude Sonnet 5`) before promoting it to the production judge.
+  quality scale has no rubric, a known failure mode for LLM judges,
+  and reproducing it confirmed the risk directly: reading responses the
+  checker marked correct but the judge scored low, 56% were genuinely
+  solid work that simply landed at a 6 or 7, clustered right at the
+  `>7` cutoff the whole metric depends on. Replaced it with a binary
+  pass/fail design run by a small, fast student judge (`GPT 5.6 Luna`),
+  which I iteratively aligned and validated against a much stronger
+  auditor judge (`Claude Sonnet 5`) before promoting it to the
+  production judge.
 
 ### Key Findings
 
