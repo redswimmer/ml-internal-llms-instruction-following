@@ -56,7 +56,7 @@ policy, and tool calling as the mechanism for testing it.
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
   Replaced it with a binary pass/fail design run by a small, fast
-  student judge (`GPT 5.6 Luna`), which I iterativly aligned and validated against
+  student judge (`GPT 5.6 Luna`), which I iteratively aligned and validated against
   a much stronger auditor judge (`Claude Sonnet 5`) before promoting it to the production judge.
 
 ### Key Findings
@@ -145,6 +145,10 @@ content. Here's how the two line up:
 | What varies | textual constraint, e.g. "avoid these keywords" | tool menu: whether a tool exists to fulfill the request |
 | Scoring | deterministic checker | deterministic checker |
 
+The paper's dataset is 102 tasks × 5 instruction types, 510 rows as
+shipped; ours applies the same pairing idea at 100 tasks × 2
+conditions, 200 rows.
+
 In practice: both rows in a pair ask for the exact same thing, word for
 word. What changes is only the tools available. If one of them can
 fulfill the request, the model should call it. If none can, it should
@@ -216,12 +220,17 @@ vague scale lets a team avoid ever writing down what "good" actually
 means. A binary pass/fail forces that decision up front.
 
 ### Failure Mode
-I ran into the same failure mode with the paper's LLM judge (GPT-4). While performign error analysis and reading responses the checker had marked correct but the 0-9 judge had scored
-low, 56% turned out to be genuinely solid work that just landed at a 6 or
-7, clustered right at the boundary the metric's `>7` cutoff depends on.
-The scale wasn't measuring quality so much as noise around one arbitrary
-line. Here's the actual prompt producing that scale, unchanged from the
-paper:
+I ran into the same failure mode reproducing the paper's judge setup,
+its 0-9 scale run across several judge models, including real GPT-4o.
+Doing error analysis on responses the checker had marked correct but
+the 0-9 judge had scored low, 56% turned out to be genuinely solid work
+that just landed at a 6 or 7, clustered right at the boundary the
+metric's `>7` cutoff depends on. The scale wasn't measuring quality so
+much as noise around one arbitrary line. The paper itself notes the
+`>7` cutoff "was defined based on the distribution of quality scores",
+so the threshold is calibrated to one judge's scoring distribution
+rather than being a portable quality bar. Here's the actual prompt
+producing that scale, unchanged from the paper:
 
 ```
 You are a helpful assistant in evaluating the quality of the outputs for a given instruction.
@@ -316,14 +325,20 @@ Trained on some requests (e.g., the hotel-booking request above), does
 the probe predict success on a different, unseen task (e.g., a
 restaurant reservation), within the same instruction condition? Both
 instruction types are pooled into one training set and split 80/20 by
-the underlying task, identical to how the paper pools all 5 of its
-instruction types together for this same test.
+the underlying task, identical to the paper's reference implementation:
+the paper's prose describes this split with instruction type held
+fixed, but its released notebook pools all 5 instruction types
+together, and matching that code is what reproduced the paper's
+numbers below.
+
+All values are at the early layer, the layer the paper's own Table 1
+numbers correspond to; ± is the std over 5 probe seeds:
 
 | Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
 |---|---|---|---|
-| First | 0.74 | 0.737 | 0.706 |
-| Middle | 0.54 | 0.492 | 0.780 |
-| Last | 0.72 | 0.711 | 0.842 |
+| First | 0.74 ± 0.02 | 0.737 ± 0.037 | 0.706 ± 0.059 |
+| Middle | 0.54 ± 0.05 | 0.492 ± 0.049 | 0.780 ± 0.070 |
+| Last | 0.72 ± 0.04 | 0.711 ± 0.055 | 0.842 ± 0.043 |
 
 Notice the consistent increase in tool-calling, unlike text-only.
 
@@ -334,14 +349,17 @@ condition the probe has never seen a single example of. The paper does
 this over 5 types; our dataset only has 2 (should accept vs. should
 reject), so this collapses to a 2-fold average: train on requests where
 a tool exists, test on requests where none does, and the reverse.
-That's one instruction condition short of the paper's 5-fold setup,
-since the dataset itself only has 2 conditions to hold out.
+That's 2 folds to the paper's 5, and each fold here trains on a single
+condition where the paper's folds train on four.
+
+Same early layer as above; for our columns, ± is the spread across
+held-out folds (5 folds for text-only, 2 for tool-calling):
 
 | Token | Text-only (paper) | Text-only (ours) | Tool-calling (ours) |
 |---|---|---|---|
-| First | 0.50 | 0.538 | 0.555 |
-| Middle | 0.51 | 0.500 | 0.602 |
-| Last | 0.51 | 0.498 | 0.656 |
+| First | 0.50 ± 0.05 | 0.538 ± 0.063 | 0.555 ± 0.006 |
+| Middle | 0.51 ± 0.05 | 0.500 ± 0.069 | 0.602 ± 0.019 |
+| Last | 0.51 ± 0.05 | 0.498 ± 0.046 | 0.656 ± 0.090 |
 
 Again, we see a consistent increase in tool-calling, unlike text-only.
 But with only 2 folds to average, and a pattern that doesn't hold as
@@ -350,13 +368,14 @@ cleanly at other layers, I'd call this suggestive, not conclusive.
 ![AUROC by token position, task generalization and instruction-type generalization side by side. Paper and text-only stay flat or dip at the middle token; tool-calling climbs steadily from first to last token in both panels.](assets/fig2_token_breakdown.png)
 
 One layer deeper: task generalization above pools `tool:in_scope` and
-`tool:out_of_scope` into one training set, same as the paper pools all 5
-of its instruction types. Pooling is the right call for comparing against
+`tool:out_of_scope` into one training set, same as the paper's reference
+implementation pools all 5 of its instruction types. Pooling is the
+right call for comparing against
 the paper, but it hides how unevenly separable the two actually are on
 their own. Breaking the same experiment out by type tells a different
 story:
 
-![Task-generalization AUROC, pooled versus split by instruction type, at the early layer across all three token positions. tool:out_of_scope is almost perfectly separable on its own; tool:in_scope sits at or below chance throughout, and the pooled bar sits above both.](assets/fig5_task_gen_masking.png)
+![Task-generalization AUROC, pooled versus split by instruction type, at the early layer across all three token positions. tool:out_of_scope is almost perfectly separable on its own; tool:in_scope sits at or near chance throughout, and the pooled bar sits above both.](assets/fig5_task_gen_masking.png)
 
 `tool:out_of_scope`, the 20%-positive minority, is the type a probe reads
 almost perfectly (up to 0.99 AUROC by the last token). `tool:in_scope`,
@@ -424,9 +443,11 @@ ones for steering (Marks & Tegmark).
 ### Does representation engineering transfer to tool-calling
 
 At alpha = 0.3, reused from the text-only experiment's tuned value, a
-sweep from 0.1 to 0.8 converted zero failures at every point and started
-breaking already-correct rows past 0.5, so 0.3 sits safely in the flat
-zone before that damage begins.
+sweep from 0.1 to 0.8 on a 40-row held-out validation split converted
+zero failures at every point and started breaking already-correct rows
+past 0.5, so 0.3 sits safely in the flat zone before that damage
+begins. The remaining 160 rows are what every number below is computed
+on.
 
 Success rate and quality ratio together, so the trade-off the paper
 checks for (does success go up without quality going down) is
@@ -460,11 +481,12 @@ checkable in one place.
 </table>
 
 **RE does not transfer to tool-calling.** Instruction-follow's success
-rate is the *lowest* of the three, the paper's own gate (must beat both
-original and random) fails outright. Not one originally-failing row got
-fixed (0% converted, versus 0.4% for random), and that's not a
-small-sample fluke, if the push were doing anything at all, some
-fraction of the batch should have flipped; none did.
+rate is the *lowest* of the three, the paper's own success criterion
+(must beat both original and random) fails outright. Not one
+originally-failing row got fixed across the 160-row evaluation set (0%
+converted, versus 0.4% for random), and that's not a small-sample
+fluke, if the push were doing anything at all, some fraction of the
+batch should have flipped; none did.
 
 **Quality ratio barely moves, in either experiment.** All three
 tool-calling values sit within 0.007 of each other, the same flatness
