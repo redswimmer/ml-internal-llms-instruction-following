@@ -69,13 +69,13 @@ policy, and tool calling as the mechanism for testing it.
 
 #### Does the model know, before it acts, whether it'll follow the policy?
 Every prompt in this dataset comes with a handful of tools available to
-the model, one of which is always `reject`. The policy is simple: call
+the model, one of which is always reject. The policy is simple: call
 the tool that actually fulfills the request, if one exists; call
-`reject` if none does. Sometimes one of the other tools genuinely does
-what the user asked (e.g., `reserve_hotel_room` for a hotel-booking
+reject if none does. Sometimes one of the other tools genuinely does
+what the user asked (e.g., reserve_hotel_room for a hotel-booking
 request), and the correct move is to call it. Sometimes none of them
-do, only unrelated tools plus `reject` are available, and the correct
-move is to call `reject` instead.
+do, only unrelated tools plus reject are available, and the correct
+move is to call reject instead.
 
 The paper asks a related but narrower question: does the model know,
 before it acts, whether it will comply with a single instruction? They
@@ -88,10 +88,10 @@ ways:
 - **Task generalization**: trained on some tasks (e.g., booking a hotel
   room), predicts success on a different, unseen task (e.g., reserving a
   restaurant table).
-- **Instruction-type generalization**: trained on requests where the
-  policy calls for a tool call, predicts success on requests where the
-  policy calls for rejection instead, a type it's never seen a single
-  example of (and the reverse).
+- **Instruction-type generalization**: trained on requests where a tool
+  exists to fulfill the request, predicts success on requests where no
+  such tool exists and the correct answer is to reject, a type it's
+  never seen a single example of (and the reverse).
 
 Task generalization AUROC is 0.706, clearly above the 0.50 chance level.
 Instruction-type generalization is 0.555, only barely above chance.
@@ -108,12 +108,18 @@ numbers. See Linear Probes below for the full side-by-side.
 
 #### Can the model be steered to follow the policy?
 Probing finds a direction in the model's activations that predicts
-success, a correlation. Representation engineering tests whether nudging
-the model along that same direction can cause success instead, not just
-predict it, the same push the paper uses, applied here to the
-accept/reject decision. A same-magnitude push in a random direction is
-the control, to check any effect comes from that specific direction and
-not just from perturbing the activation at all:
+success, meaning the checker-verified correct action, calling the right
+tool or correctly declining, the same thing the probes above were
+trained to predict, a correlation. 
+
+Representation engineering tests
+whether nudging the model along that same direction can cause success
+instead of just predicting it, the same push the paper uses, applied
+here to the accept/reject decision. Success rate below adds one more
+gate on top: a response only counts as a success if it's also judged
+high quality, not just checker-correct. A same-magnitude push in a
+random direction is the control, to check any effect comes from that
+specific direction and not just from perturbing the activation at all:
 
 | | Original | Random | Instruction-follow |
 |---|---|---|---|
