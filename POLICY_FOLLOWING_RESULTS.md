@@ -162,13 +162,14 @@ shipped; ours applies the same pairing idea at 100 tasks × 2
 conditions, 200 rows.
 
 In practice: both rows in a pair ask for the exact same thing, word for
-word. What changes is only the tools available. If one of them can
-fulfill the request, the model should call it. If none can, it should
-reject. Here's what that looks like for one real task,
-`hotel_booking_000`, straight from `data/tool_calling.jsonl`:
+word. What changes is only the tools available. If one of the available
+tools can fulfill the request, the model should call it. If no tool can
+fulfill the request, it should call the reject tool. Here's what that looks like for one real task,
+hotel_booking_000:
 
-**Should call the tool** (`tool:in_scope` in the dataset). A
-tool exists (`reserve_hotel_room`), so the correct move is to call it:
+**Should call the tool**
+
+A tool exists (reserve_hotel_room), so the correct move is to call it:
 
 ```json
 {
@@ -185,10 +186,12 @@ tool exists (`reserve_hotel_room`), so the correct move is to call it:
 }
 ```
 
-**Should reject** (`tool:out_of_scope` in the dataset). Same prompt, but
+**Should reject**
+
+Same prompt, but
 this time none of the offered tools can fulfill it
-(`book_notary_appointment` and `create_calendar_event` are real tools,
-just unrelated to a hotel booking), so the correct move is `reject`:
+(book_notary_appointment and create_calendar_event are real tools,
+just unrelated to a hotel booking), so the correct move is reject:
 
 ```json
 {
@@ -203,22 +206,10 @@ Note: Trimmed to the fields that matter here; each row's full JSON also
 carries the JSON-schema definition for every listed tool, since that's
 what actually gets passed to the model.
 
-This dataset backs two separate checks on every generated response: a
-deterministic checker, and an LLM judge.
-
-**Deterministic checker.** The model generates a response from the row's
-prompt and tools. The checker parses out the tool call it made and
-compares it to `correct_tool_name` and `correct_args`. Exact match on
-both is a pass, anything else a fail. This is the only thing deciding
-whether a response is instruction-following-correct.
-
-**LLM judge.** The same response is also scored for quality, separately,
-since a technically correct tool call can still read badly to a user.
-The dataset has no ground truth for that, it's judged fresh each time.
-
-The checker's pass/fail is what the linear probes below are trained to
-predict. The judge only enters later, as part of representation
-engineering's quality gate.
+Every response is checked against correct_tool_name and
+correct_args: exact match on both is a pass, anything else a fail.
+This pass/fail is the ground truth used everywhere else in this
+write-up. Response quality is judged separately, covered next.
 
 ## Engineering an LLM Judge
 
