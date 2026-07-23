@@ -451,8 +451,9 @@ difference, for the trained direction or its random control alike, a
 projection can only shrink a vector, never grow it, so the push stays
 too small to matter regardless of alpha. Existing work on how these
 directions are built suggested an alternative: unprojected mass-mean
-directions tend to beat probe-weight ones for steering (Marks &
-Tegmark). I used the mean difference directly instead, unprojected.
+directions tend to beat probe-weight ones for steering
+([Marks & Tegmark](https://arxiv.org/abs/2310.06824)). I used the mean
+difference directly instead, unprojected.
 That worked on our text-only recreation; whether it also carries over
 to tool-calling is what the rest of this section tests.
 
@@ -555,27 +556,28 @@ request it's never seen a single example of. Before it decides between
 calling a tool and calling reject, the model's own internal state
 already distinguishes which one the situation calls for.
 
-That knowledge can't be steered into more reliable policy adherence, at
-least not with the same lever the paper uses, nudging the
-representation along what it calls the instruction-following
-direction. In the paper's own text-only setting, that push clearly
-helps. It doesn't transfer here, it never raises the tool-calling
-success rate. It's actively harmful, it never converts a genuine
-failure into a success, while quietly breaking responses that were
-already correct. That holds for both directions of the policy checked
-separately, not just pooled. Calling the tool and rejecting both fail
-to improve under the same push, so it isn't a case of one direction
-quietly working while the other drags the average down.
+The model can't be steered toward more reliably following that policy
+on this model, at least not with the same lever the paper uses,
+nudging the representation along what it calls the
+instruction-following direction. In the paper's own text-only setting,
+that push clearly helps. It doesn't transfer here, it never raises the
+tool-calling success rate. It's actively harmful, it never converts a
+genuine failure into a success, while quietly breaking responses that
+were already correct. That holds for both directions of the policy
+checked separately, not just pooled. Calling the tool and rejecting
+both fail to improve under the same push, so it isn't a case of one
+direction quietly working while the other drags the average down.
 
-Together, that's a real dissociation between knowing and being
-steerable. The model knows which action its policy calls for, but that
-knowledge isn't something this push can act on. Practically, that
-argues for using this as a passive guardrail, a pre-generation check on
-whether an agent is about to call a tool it shouldn't, rather than a
-live correction mechanism. One thing worth trying next is training the
-steering direction on the reject cases alone instead of pooling both
-instruction types together, since calling the tool and rejecting may
-need genuinely different pushes, not one shared one.
+Together, that's a real dissociation between knowing and steering
+toward the policy. The model knows which action its policy calls for,
+but steering it toward that action isn't something this push can do.
+Practically, that argues for using this as a passive guardrail, a
+pre-generation check on whether an agent is about to call a tool it
+shouldn't, rather than a live correction mechanism. One thing worth
+trying next is simply a newer model: Mistral-7B-Instruct-v0.3 is a
+couple of years old at this point, and a model trained with more
+modern tool-calling data might represent the accept/reject decision
+differently enough for this same push to actually work.
 
 ## Citation
 
@@ -618,6 +620,21 @@ The representation engineering technique used here comes from:
       archivePrefix={arXiv},
       primaryClass={cs.LG},
       url={https://arxiv.org/abs/2310.01405},
+}
+```
+
+The choice of an unprojected mass-mean direction over the paper's
+probe-weight projection was informed by:
+
+```bibtex
+@misc{marks2023geometrytruthemergentlinear,
+      title={The Geometry of Truth: Emergent Linear Structure in Large Language Model Representations of True/False Datasets},
+      author={Samuel Marks and Max Tegmark},
+      year={2023},
+      eprint={2310.06824},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2310.06824},
 }
 ```
 
