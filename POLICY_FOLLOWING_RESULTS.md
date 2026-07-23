@@ -413,7 +413,7 @@ R_updated = R_original + alpha * D
 ```
 
 `D` is that direction, `alpha` controls how strong the push is. Full
-mechanics in the [RE paper](https://arxiv.org/abs/2310.01405) cited
+mechanics in the [representation engineering paper](https://arxiv.org/abs/2310.01405) cited
 below.
 
 ### Choosing a direction
@@ -426,7 +426,7 @@ the model's activations on successes and on failures.
 mean_diff = mean(activations on successes) - mean(activations on failures)
 ```
 
-**The paper's direction** keeps only the piece of `mean_diff` that lines
+**The paper's direction** keeps only the piece of mean_diff that lines
 up with the probe's own trained weight vector, a mathematical
 projection, dropping whatever part points some other way.
 
@@ -435,22 +435,28 @@ probe_direction = probe_weight / norm(probe_weight)
 paper_direction = dot(mean_diff, probe_direction) * probe_direction
 ```
 
-**Our direction** skips that projection and uses `mean_diff` directly,
+**Our direction** skips that projection and uses mean_diff directly,
 unfiltered.
 
 ```
 our_direction = mean_diff
 ```
 
-I tested the paper's projected direction directly, at its published
-Mistral alpha (0.15) and well beyond (up to 3.0), it did nothing either
-way, for the trained direction or its random control alike, a
-projection can only shrink a vector, never grow it, so the push stayed
-too small to matter. I used that same mean difference directly instead,
-unprojected, mass-mean directions like this tend to beat probe-weight
-ones for steering (Marks & Tegmark).
+I tried the paper's formula first, at its published Mistral alpha
+(0.15), the success rate came out no different from the original,
+unmodified responses. As due diligence, I swept alpha well beyond that,
+up to 3.0,
+twenty times the published value, same result, no measurable
+difference, for the trained direction or its random control alike, a
+projection can only shrink a vector, never grow it, so the push stays
+too small to matter regardless of alpha. Existing work on how these
+directions are built suggested an alternative: unprojected mass-mean
+directions tend to beat probe-weight ones for steering (Marks &
+Tegmark). I used the mean difference directly instead, unprojected.
+That worked on our text-only recreation; whether it also carries over
+to tool-calling is what the rest of this section tests.
 
-### Does representation engineering transfer to tool-calling
+### Does steering toward the policy work on tool-calling too?
 
 At alpha = 0.3, reused from the text-only experiment's tuned value, a
 sweep from 0.1 to 0.8 on a 40-row held-out validation split converted
@@ -461,7 +467,9 @@ on.
 
 Success rate and quality ratio together, so the trade-off the paper
 checks for (does success go up without quality going down) is
-checkable in one place.
+checkable in one place. Quality ratio is the fraction of
+checker-passing responses that also pass the quality judge, whereas
+success rate requires both out of every response.
 
 <table>
 <tr>
@@ -490,7 +498,7 @@ checkable in one place.
 </tr>
 </table>
 
-**RE does not transfer to tool-calling.** Instruction-follow's success
+**Steering toward the policy does not work on tool-calling.** Instruction-follow's success
 rate is the *lowest* of the three, the paper's own success criterion
 (must beat both original and random) fails outright. Not one
 originally-failing row got fixed across the 160-row evaluation set (0%
