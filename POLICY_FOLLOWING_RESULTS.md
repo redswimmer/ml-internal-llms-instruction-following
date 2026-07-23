@@ -51,9 +51,9 @@ policy, and tool calling as the mechanism for testing it.
   request and a set of tools, does the model know whether it'll follow
   the policy of calling the right tool when one applies and declining
   otherwise, rather than guessing?** Built a paired dataset to test
-  exactly that: an *in-scope* variant where the right tool exists
-  (policy: call it) and an *out-of-scope* variant where it doesn't
-  (policy: reject).
+  exactly that: for every request, one variant where a tool exists to
+  fulfill it (policy: call it) and one variant, otherwise identical,
+  where none does (policy: reject).
 - **Built a binary LLM judge to score that outcome.** The paper's 0-9
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
