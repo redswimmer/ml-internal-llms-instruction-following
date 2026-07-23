@@ -47,12 +47,13 @@ policy, and tool calling as the mechanism for testing it.
 ### Contributions
 
 - **The paper asks whether the model knows if it'll follow a single
-  instruction correctly. I extended that to tool-calling: given a
-  request and a set of tools, does the model know which action is
-  correct, calling one of them or declining, and does it act on that
-  instead of guessing?** Built a paired dataset to test exactly that:
-  an *in-scope* variant where the right tool exists (should call it)
-  and an *out-of-scope* variant where it doesn't (should reject).
+  instruction correctly. I extended that question to a policy: given a
+  request and a set of tools, does the model know whether it'll follow
+  the policy of calling the right tool when one applies and declining
+  otherwise, rather than guessing?** Built a paired dataset to test
+  exactly that: an *in-scope* variant where the right tool exists
+  (policy: call it) and an *out-of-scope* variant where it doesn't
+  (policy: reject).
 - **Built a binary LLM judge to score that outcome.** The paper's 0-9
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
