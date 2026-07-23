@@ -147,7 +147,7 @@ Engineering below.
 ## Extending the Dataset
 
 I built this [dataset](data/tool_calling.jsonl) the same way the paper builds IFEval-simple: pair
-every instruction condition against the same set of tasks, so a probe's
+every instruction type against the same set of tasks, so a probe's
 signal can be attributed to the instruction, not incidental task
 content. Here's how the two line up:
 
@@ -327,7 +327,7 @@ equivalent of both.
 
 Trained on some requests (e.g., the hotel-booking request above), does
 the probe predict success on a different, unseen task (e.g., a
-restaurant reservation), within the same instruction condition? Both
+restaurant reservation), within the same instruction type? Both
 instruction types are pooled into one training set and split 80/20 by
 the underlying task, identical to the paper's reference implementation:
 the paper's prose describes this split with instruction type held
@@ -353,13 +353,13 @@ longer free-text response at the same relative position isn't.
 
 ### Instruction-type generalization
 
-This is the harder test: train on one instruction condition, test on a
-condition the probe has never seen a single example of. The paper does
-this over 5 types; our dataset only has 2 (should accept vs. should
-reject), so this collapses to a 2-fold average: train on requests where
-a tool exists, test on requests where none does, and the reverse.
+This is the harder test: train on one instruction type, test on a
+type the probe has never seen a single example of. The paper does
+this over 5 types; our dataset only has 2, so this collapses to a
+2-fold average: train on requests where a tool exists, test on
+requests where none does, and the reverse.
 That's 2 folds to the paper's 5, and each fold here trains on a single
-condition where the paper's folds train on four.
+type where the paper's folds train on four.
 
 Same early layer as above; for our columns, ± is the spread across
 held-out folds (5 folds for text-only, 2 for tool-calling):
