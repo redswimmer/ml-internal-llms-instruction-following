@@ -344,7 +344,12 @@ numbers correspond to; ± is the std over 5 probe seeds:
 | Middle | 0.54 ± 0.05 | 0.492 ± 0.049 | 0.780 ± 0.070 |
 | Last | 0.72 ± 0.04 | 0.711 ± 0.055 | 0.842 ± 0.043 |
 
-Notice the consistent increase in tool-calling, unlike text-only.
+Notice the consistent increase in tool-calling, unlike text-only. A
+likely reason, though not something I checked directly: tool-calling
+responses are short and highly structured, so by the middle or last
+token the model has already committed to a specific tool call,
+information tightly coupled to which task is being asked, in a way a
+longer free-text response at the same relative position isn't.
 
 ### Instruction-type generalization
 
