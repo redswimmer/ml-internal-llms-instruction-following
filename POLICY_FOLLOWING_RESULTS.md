@@ -376,25 +376,26 @@ cleanly at other layers, I'd call this suggestive, not conclusive.
 
 ![AUROC by token position, task generalization and instruction-type generalization side by side. Paper and text-only stay flat or dip at the middle token; tool-calling climbs steadily from first to last token in both panels.](assets/fig2_token_breakdown.png)
 
-One layer deeper: task generalization above pools `tool:in_scope` and
-`tool:out_of_scope` into one training set, same as the paper's reference
-implementation pools all 5 of its instruction types. Pooling is the
-right call for comparing against
-the paper, but it hides how unevenly separable the two actually are on
-their own. Breaking the same experiment out by type tells a different
-story:
+One layer deeper: task generalization above pools the should-call type
+(a tool exists) and the should-reject type (no tool exists) into one
+training set, same as the paper's reference implementation pools all 5
+of its instruction types. Pooling is the right call for comparing
+against the paper, but it hides how unevenly separable the two
+actually are on their own. Breaking the same experiment out by type
+tells a different story:
 
-![Task-generalization AUROC, pooled versus split by instruction type, at the early layer across all three token positions. tool:out_of_scope is almost perfectly separable on its own; tool:in_scope sits at or near chance throughout, and the pooled bar sits above both.](assets/fig5_task_gen_masking.png)
+![Task-generalization AUROC, pooled versus split by instruction type, at the early layer across all three token positions. The should-reject type (no tool exists) is almost perfectly separable on its own; the should-call type (a tool exists) sits at or near chance throughout, and the pooled bar sits above both.](assets/fig5_task_gen_masking.png)
 
-`tool:out_of_scope`, the 20%-positive minority, is the type a probe reads
-almost perfectly (up to 0.99 AUROC by the last token). `tool:in_scope`,
-the 68%-positive majority, is the weak one, sitting at chance for most of
-the grid. That's the opposite of what I expected going in: with roughly a
-third as many positive examples, I assumed `out_of_scope` would be the
-harder type to learn, not the easier one. It means the pooled numbers
-above, while the correct comparison to the paper's own pooled setup,
-overstate how separable `tool:in_scope` specifically is. Most of the
-pooled signal is `out_of_scope` carrying the average up.
+The should-reject type, the 20%-positive minority, is the type a probe
+reads almost perfectly (up to 0.99 AUROC by the last token). The
+should-call type, the 68%-positive majority, is the weak one, sitting
+at chance for most of the grid. That's the opposite of what I expected
+going in: with roughly a third as many positive examples, I assumed
+the should-reject type would be the harder type to learn, not the
+easier one. It means the pooled numbers above, while the correct
+comparison to the paper's own pooled setup, overstate how separable the
+should-call type specifically is. Most of the pooled signal is the
+should-reject type carrying the average up.
 
 ## Representation Engineering
 
@@ -520,19 +521,20 @@ directly:
 
 The pooled tool-calling numbers above combine both directions of the
 policy: call the tool, and reject. Linear Probes already showed pooling
-can hide a real split between the two (`tool:out_of_scope` was far more
-separable than `tool:in_scope`), so the same check is worth running
-here: does RE's null result hold up when the two directions are looked
-at separately, or is a real per-type effect getting averaged away?
+can hide a real split between the two (the should-reject type was far
+more separable than the should-call type), so the same check is worth
+running here: does RE's null result hold up when the two directions
+are looked at separately, or is a real per-type effect getting averaged
+away?
 
-![Success rate by condition, pooled versus split by tool:in_scope and tool:out_of_scope. All three bars for tool:in_scope sit close together around 0.44 to 0.46, and all three for tool:out_of_scope sit close together around 0.21, with instruction-follow never the highest in either group.](assets/fig6_re_type_masking.png)
+![Success rate by condition, pooled versus split by should-call and should-reject type. All three bars for the should-call type sit close together around 0.44 to 0.46, and all three for the should-reject type sit close together around 0.21, with instruction-follow never the highest in either group.](assets/fig6_re_type_masking.png)
 
-It holds up. `tool:in_scope` goes 0.463 to 0.463 to 0.438 across
-Original, Random, and Instruction-follow; `tool:out_of_scope` goes 0.213
-to 0.217 to 0.212. Instruction-follow isn't the best condition for
-either direction of the policy individually, so the pooled null result
-isn't hiding a win on the call-the-tool side or the reject side. Whatever
-this lever is doing, it isn't doing it selectively.
+It holds up. The should-call type goes 0.463 to 0.463 to 0.438 across
+Original, Random, and Instruction-follow; the should-reject type goes
+0.213 to 0.217 to 0.212. Instruction-follow isn't the best condition
+for either direction of the policy individually, so the pooled null
+result isn't hiding a win on the call-the-tool side or the reject side.
+Whatever this lever is doing, it isn't doing it selectively.
 
 ## Conclusion
 
