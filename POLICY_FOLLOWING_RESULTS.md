@@ -30,7 +30,8 @@ policy accordingly: call a tool if (and only if) one genuinely fulfills
 the request, decline otherwise.
 
 I initially reproduced the paper's own text-only instruction following
-results, then extended both of its core experiments, linear probing and
+results, then extended both of its core experiments,
+[linear probing](https://arxiv.org/abs/1610.01644) and
 [representation engineering](https://arxiv.org/abs/2310.01405), to a
 tool-calling setting, using the same model and methodology throughout,
 to see if the same findings hold. I ran everything on
@@ -571,6 +572,20 @@ This work extends:
       archivePrefix={arXiv},
       primaryClass={cs.AI},
       url={https://arxiv.org/abs/2410.14516},
+}
+```
+
+The linear probing technique used here comes from:
+
+```bibtex
+@misc{alain2016understandingintermediatelayersusing,
+      title={Understanding intermediate layers using linear classifier probes},
+      author={Guillaume Alain and Yoshua Bengio},
+      year={2016},
+      eprint={1610.01644},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/1610.01644},
 }
 ```
 
