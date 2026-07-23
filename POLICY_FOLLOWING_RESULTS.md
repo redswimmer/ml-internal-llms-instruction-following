@@ -557,7 +557,7 @@ calling a tool and calling reject, the model's own internal state
 already distinguishes which one the situation calls for.
 
 The model can't be steered toward more reliably following that policy
-on this model, at least not with the same lever the paper uses,
+on Mistral-7B-Instruct-v0.3, at least not with the same lever the paper uses,
 nudging the representation along what it calls the
 instruction-following direction. In the paper's own text-only setting,
 that push clearly helps. It doesn't transfer here, it never raises the
