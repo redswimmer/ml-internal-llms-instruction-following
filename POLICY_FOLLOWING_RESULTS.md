@@ -16,11 +16,18 @@ instruction following, but its actual experiments never leave free-text
 generation: write a resume, avoid these keywords, end with this phrase.
 I gave the model real tools to work with. Tools are just the mechanism
 for following the instruction, an agent either has the right tool
-for a request or it doesn't, and getting that judgment wrong (guessing
+for a request or it doesn't, and getting that judgment wrong (hallucinating a tool or guessing
 instead of declining) is arguably more dangerous than writing a mediocre
 paragraph. I wanted to see if the same "internal knowing" the paper
 found extends to that decision of knowing when to refuse to follow
 instructions.
+
+To be precise about what's being tested: this isn't a benchmark of
+tool-calling proficiency, whether the model can format a valid function
+call. It's a test of judgment. Given a set of tools, does the model
+know whether any of them actually apply, and does it follow a simple
+policy accordingly: call a tool if (and only if) one genuinely fulfills
+the request, decline otherwise.
 
 I initially reproduced the paper's own text-only instruction following
 results, then extended both of its core experiments, linear probing and
@@ -32,17 +39,19 @@ real tool-calling support, on an RTX 4090 (24GB VRAM), and stuck with
 their model rather than a newer one like Qwen to keep the comparison
 direct. 
 
-I'm not planning to go into detail on the initial text-only recreation of the paper and instead focus on the LLMs accept/reject decision, and
-tool calling as the mechanism for testing it.
+I'm not planning to go into detail on the initial text-only recreation
+of the paper and instead focus on whether the model follows that
+policy, and tool calling as the mechanism for testing it.
 
 ### Contributions
 
-- **The paper asks whether the model knows if it'll comply. I extended
-  that to the version that matters greatly for agents: does it know when
-  it *can't* comply, and refuse instead of guessing?** Built a paired
-  dataset to test exactly that: an *in-scope* variant where the right
-  tool exists (should comply) and an *out-of-scope* variant where it
-  doesn't (should reject).
+- **The paper asks whether the model knows if it'll follow a single
+  instruction correctly. I extended that to tool-calling: given a
+  request and a set of tools, does the model know which action is
+  correct, calling one of them or declining, and does it act on that
+  instead of guessing?** Built a paired dataset to test exactly that:
+  an *in-scope* variant where the right tool exists (should call it)
+  and an *out-of-scope* variant where it doesn't (should reject).
 - **Built a binary LLM judge to score that outcome.** The paper's 0-9
   quality scale has no rubric, a known failure mode for LLM judges, and
   it broke down right at the cutoff (7) the whole metric depends on.
@@ -52,54 +61,76 @@ tool calling as the mechanism for testing it.
 
 ### Key Findings
 
-#### Does the model know before it acts?
-A probe on the model's own activations, tested on tool-calling requests
-it never saw during training, predicts whether it'll pick the right tool
-or correctly decline. Task generalization is well above the 0.50 chance
-level across the board. Instruction-type generalization stays close to
-chance, consistent with the paper's own result:
+#### Does the model know, before it acts, whether it'll follow the policy?
+Every prompt in this dataset comes with a handful of tools available to
+the model, one of which is always `reject`. The policy is simple: call
+the tool that actually fulfills the request, if one exists; call
+`reject` if none does. Sometimes one of the other tools genuinely does
+what the user asked (e.g., `reserve_hotel_room` for a hotel-booking
+request), and the correct move is to call it. Sometimes none of them
+do, only unrelated tools plus `reject` are available, and the correct
+move is to call `reject` instead.
 
-| | Task generalization | Instruction-type generalization |
-|---|---|---|
-| Text-only (paper) | 0.74 ± 0.02 | 0.50 ± 0.05 |
-| Text-only (ours) | 0.737 ± 0.037 | 0.538 ± 0.063 |
-| Tool-calling (ours) | 0.706 ± 0.059 | 0.555 ± 0.006 |
+The paper asks a related but narrower question: does the model know,
+before it acts, whether it will comply with a single instruction? They
+test this with a linear probe on the model's activations at the first
+token, before generation begins. I use the identical probing
+methodology here, applied to the question above instead, whether the
+model knows which action the policy calls for, tested two different
+ways:
 
-![AUROC comparison: task generalization is well above chance for the paper and both of our runs. Instruction-type generalization stays close to chance across all three.](assets/fig1_auroc_headline.png)
+- **Task generalization**: trained on some tasks (e.g., booking a hotel
+  room), predicts success on a different, unseen task (e.g., reserving a
+  restaurant table).
+- **Instruction-type generalization**: trained on requests where the
+  policy calls for a tool call, predicts success on requests where the
+  policy calls for rejection instead, a type it's never seen a single
+  example of (and the reverse).
 
-Text-only (ours) lands close to the paper's published numbers.  Tool-calling (ours) is that identical pipeline, run on the tool-calling
-dataset instead.
+Task generalization AUROC is 0.706, clearly above the 0.50 chance level.
+Instruction-type generalization is 0.555, only barely above chance.
+That's the harder test, since the probe has never seen a single example
+of the condition it's being asked to predict:
 
-#### Can that knowledge be steered?
-In the paper, nudging the model's representation along what it calls the
-"instruction-following direction" raised the success rate, the fraction
-of responses that both pass the deterministic checker and clear a
-quality bar, over the unmodified baseline. The paper also tests a
-same-magnitude push in a random direction, to check the effect is coming
-from that specific direction and not just from perturbing the activation
-at all. In tool-calling, Instruction-follow comes in below both Original
-and Random: not just unhelpful, worse than doing nothing.
+![AUROC for our tool-calling accept/reject probe: task generalization is well above the 0.50 chance level, instruction-type generalization is only barely above it.](assets/fig1_auroc_headline.png)
+
+The model does know, at least partially, whether it's about to follow
+the policy correctly before it ever tries a tool call. This is the same
+test the paper runs on free-text instructions. I reproduced that
+text-only version faithfully too, landing close to the paper's own
+numbers. See Linear Probes below for the full side-by-side.
+
+#### Can the model be steered to follow the policy?
+Probing finds a direction in the model's activations that predicts
+success, a correlation. Representation engineering tests whether nudging
+the model along that same direction can cause success instead, not just
+predict it, the same push the paper uses, applied here to the
+accept/reject decision. A same-magnitude push in a random direction is
+the control, to check any effect comes from that specific direction and
+not just from perturbing the activation at all:
 
 | | Original | Random | Instruction-follow |
 |---|---|---|---|
-| Text-only (paper) | 0.58 ± 0.00 | 0.56 ± 0.02 | 0.64 ± 0.02 |
-| Text-only (ours) | 0.525 ± 0.00 | 0.533 ± 0.004 | 0.570 ± 0.00 |
-| Tool-calling (ours) | 0.338 ± 0.00 | 0.340 ± 0.003 | 0.325 ± 0.00 |
+| Success rate (SR) | 0.338 ± 0.00 | 0.340 ± 0.003 | 0.325 ± 0.00 |
+| Success conversion ratio (SCR) | n/a | 0.004 | 0.000 |
+| Success preservation ratio (SPR) | n/a | 1.000 | 0.970 |
 
-![Success rate across Original, Random, and Instruction-follow conditions, for the paper, our text-only recreation, and our tool-calling extension. Paper and text-only both climb left to right; tool-calling is flat-to-declining and ends up lowest at Instruction-follow.](assets/fig1b_re_headline_sr.png)
+![Success rate, success conversion ratio, and success preservation ratio for our tool-calling accept/reject task. SR: Instruction-follow ends up the lowest of the three. SCR: Instruction-follow converts zero originally-failing rows to success, versus 0.004 for a random push. SPR: Instruction-follow also preserves slightly fewer already-correct rows than random.](assets/fig1b_re_headline_sr_scr.png)
 
-Original and Instruction-follow are truly deterministic on my side, greedy
-decoding against a fixed direction, so ± 0.00 is exact, not just one
-run. The paper's own Instruction-follow std comes from retraining their probe
-per seed; my direction is a closed-form mean-difference vector instead
-(why, in Representation Engineering below), so there's no seed variance
-left to average there.
+Instruction-follow comes in lowest of the three on SR, below both the
+unmodified baseline and a random push, but SCR is the sharper number:
+Instruction-follow converts zero originally-failing rows to success,
+literally none, while even a random push converts a few. Original and
+Instruction-follow are deterministic here, greedy decoding against a
+fixed direction, so ± 0.00 is exact, not an artifact of a small sample;
+Random's own small std comes from averaging several actual random
+directions.
 
-The model still "knows" in tool-calling. If anything it knows more
-strongly than in the paper's original setting. But steering that
-knowledge doesn't transfer. The instruction-following direction drops below both
-original and random, where in the text-only setting it clearly beat
-both. Both results, and why, are covered below.
+The model knows whether it'll follow the policy. It just can't be
+nudged into acting on that knowledge, at least not by this lever, and
+in the paper's own text-only setting the same push clearly helps
+instead. Full numbers for both settings, and why, are in Representation
+Engineering below.
 
 ## Extending the Dataset
 
@@ -115,12 +146,12 @@ content. Here's how the two line up:
 | Scoring | deterministic checker | deterministic checker |
 
 In practice: both rows in a pair ask for the exact same thing, word for
-word. What changes is only the tools on offer. If one of them can
+word. What changes is only the tools available. If one of them can
 fulfill the request, the model should call it. If none can, it should
 reject. Here's what that looks like for one real task,
 `hotel_booking_000`, straight from `data/tool_calling.jsonl`:
 
-**Should follow the instruction** (`tool:in_scope` in the dataset). A
+**Should call the tool** (`tool:in_scope` in the dataset). A
 tool exists (`reserve_hotel_room`), so the correct move is to call it:
 
 ```json
@@ -224,12 +255,12 @@ flowchart TD
 ### LLM Judge Roles
 
 Each judge has its own job, scored against explicit pass/fail criteria
-instead of a vibe: the comply judge checks the model's confirmation, the
-decline judge checks its refusal. Neither judges tool usage, the checker
-already handled that. Both only ever see the model's own written
-explanation, never the tool call itself.
+instead of a vibe: the in-scope judge checks the model's confirmation,
+the out-of-scope judge checks its refusal. Neither judges tool usage,
+the checker already handled that. Both only ever see the model's own
+written explanation, never the tool call itself.
 
-#### Should Comply
+#### Should Call the Tool
 
 Used whenever the correct tool exists and the model is
 expected to call it:
@@ -270,10 +301,11 @@ Score (respond with ONLY the single integer 0 or 1):
 A linear probe is a small classifier trained directly on the model's own
 internal activations to predict whether a response will comply with an
 instruction, before the model has even finished generating it, the
-paper's own definition of "knowing internally." In the case of our experiment, complying means
-picking the right tool or correctly declining. Same probe architecture
-as the paper, logistic regression: one linear layer, sigmoid output.
-Same 3 layers × 3 token positions, 5 seeds per cell.
+paper's own definition of "knowing internally." In our experiment,
+that's whether the model follows the tool-use policy: picking the right
+tool when one exists, or correctly declining when none does. Same probe
+architecture as the paper, logistic regression: one linear layer,
+sigmoid output. Same 3 layers × 3 token positions, 5 seeds per cell.
 
 The paper runs two distinct generalization tests. I ran the tool-calling
 equivalent of both.
@@ -281,7 +313,7 @@ equivalent of both.
 ### Task generalization
 
 Trained on some requests (e.g., the hotel-booking request above), does
-the probe predict compliance on a different, unseen task (e.g., a
+the probe predict success on a different, unseen task (e.g., a
 restaurant reservation), within the same instruction condition? Both
 instruction types are pooled into one training set and split 80/20 by
 the underlying task, identical to how the paper pools all 5 of its
@@ -333,7 +365,7 @@ the grid. That's the opposite of what I expected going in: with roughly a
 third as many positive examples, I assumed `out_of_scope` would be the
 harder type to learn, not the easier one. It means the pooled numbers
 above, while the correct comparison to the paper's own pooled setup,
-overstate how separable `tool:in_scope` specifically is — most of the
+overstate how separable `tool:in_scope` specifically is. Most of the
 pooled signal is `out_of_scope` carrying the average up.
 
 ## Representation Engineering
@@ -397,7 +429,7 @@ breaking already-correct rows past 0.5, so 0.3 sits safely in the flat
 zone before that damage begins.
 
 Success rate and quality ratio together, so the trade-off the paper
-checks for (does compliance go up without quality going down) is
+checks for (does success go up without quality going down) is
 checkable in one place.
 
 <table>
@@ -427,8 +459,6 @@ checkable in one place.
 </tr>
 </table>
 
-![Success rate and quality ratio across Original, Random, and Instruction-follow conditions, compared across the paper, our text-only run, and our tool-calling run. The paper and our text-only run both show instruction-follow beating original and random; tool-calling shows the opposite ordering, with instruction-follow the lowest of the three.](assets/fig3_re_sr_qr.png)
-
 **RE does not transfer to tool-calling.** Instruction-follow's success
 rate is the *lowest* of the three, the paper's own gate (must beat both
 original and random) fails outright. Not one originally-failing row got
@@ -449,31 +479,62 @@ a success, while progressively breaking already-correct rows at higher
 alpha (97% of originally-passing rows stayed passing, versus 100% for
 random).
 
-![Success conversion ratio and success preservation ratio for our text-only run versus our tool-calling run. Text-only converts about 1 in 5 failures under instruction-follow; tool-calling converts zero, and also preserves slightly fewer of its already-correct rows than its own random-direction control.](assets/fig4_re_scr_spr.png)
+The paper answers "did steering work" with its own three-panel SR / SCR
+/ SPR figure, one panel per metric, grouped by model. Here's the same
+three panels, laid out the same way, for our two experiments instead of
+their four models, so it's easy to hold next to theirs and compare
+directly:
+
+![Success rate, success conversion ratio, and success preservation ratio, side by side, matching the paper's own three-panel RE figure (SCR/SPR panels show only our two runs, since the paper reports those two metrics only as a chart, not a table, so there's no exact number of theirs to plot). SR: the paper's and our text-only instruction-follow bars both end up the tallest of their three conditions; our tool-calling instruction-follow bar ends up the shortest. SCR: our text-only instruction-follow bar clearly beats its random control (0.211 vs. 0.039), the same shape as the paper's own claim; our tool-calling instruction-follow bar does not (0.000 vs. 0.004). SPR: both of our runs dip slightly below their own random control under instruction-follow, unlike the paper's own chart, where instruction-follow's SPR bar is consistently at or above random's, for every model.](assets/fig3_re_sr_scr_spr.png)
+
+The pooled tool-calling numbers above combine both directions of the
+policy: call the tool, and reject. Linear Probes already showed pooling
+can hide a real split between the two (`tool:out_of_scope` was far more
+separable than `tool:in_scope`), so the same check is worth running
+here: does RE's null result hold up when the two directions are looked
+at separately, or is a real per-type effect getting averaged away?
+
+![Success rate by condition, pooled versus split by tool:in_scope and tool:out_of_scope. All three bars for tool:in_scope sit close together around 0.44 to 0.46, and all three for tool:out_of_scope sit close together around 0.21, with instruction-follow never the highest in either group.](assets/fig6_re_type_masking.png)
+
+It holds up. `tool:in_scope` goes 0.463 to 0.463 to 0.438 across
+Original, Random, and Instruction-follow; `tool:out_of_scope` goes 0.213
+to 0.217 to 0.212. Instruction-follow isn't the best condition for
+either direction of the policy individually, so the pooled null result
+isn't hiding a win on the call-the-tool side or the reject side. Whatever
+this lever is doing, it isn't doing it selectively.
 
 ## Conclusion
 
-- **Does the model know when it can't comply?** Yes, clearly. The probe
-  separates accept-from-reject decisions well above chance on requests it
-  never trained on (task generalization up to 0.84 AUROC), and the signal
-  even carries, more weakly, to an instruction type it's never seen a
-  single example of. Before it ever emits a tool call, the model's own
-  activations already distinguish "a tool for this exists" from "none of
-  these tools apply."
-- **Can that knowledge be steered?** No. Nudging the representation
-  toward "success" doesn't raise the tool-calling success rate, it's
-  actively harmful, it never converts a genuine failure into a success,
-  while quietly breaking responses that were already correct. The signal
-  is there, this particular lever doesn't reach it.
-- Together, that's a real dissociation, not a wash. The same internal
-  signal a probe reads off cleanly can't be pushed on directly to change
-  behavior. Practically, that argues for using this as a passive
-  guardrail, a pre-generation check on whether an agent is about to
-  reach for the wrong tool, rather than a live correction mechanism. One
-  thing worth trying next, training the steering direction on the reject
-  cases alone instead of pooling both instruction types together, since
-  accept and reject may need genuinely different pushes, not one shared
-  one.
+The model knows whether it'll follow the policy, in the sense the paper
+itself uses that word. A probe trained on its activations, before it
+ever emits a tool call, separates the requests it'll handle correctly
+from the ones it won't well above chance (task generalization up to
+0.84 AUROC). That signal even carries, more weakly, to a type of
+request it's never seen a single example of. Before it decides between
+calling a tool and calling reject, the model's own internal state
+already distinguishes which one the situation calls for.
+
+That knowledge can't be steered into more reliable policy adherence, at
+least not with the same lever the paper uses, nudging the
+representation along what it calls the instruction-following
+direction. In the paper's own text-only setting, that push clearly
+helps. It doesn't transfer here, it never raises the tool-calling
+success rate. It's actively harmful, it never converts a genuine
+failure into a success, while quietly breaking responses that were
+already correct. That holds for both directions of the policy checked
+separately, not just pooled. Calling the tool and rejecting both fail
+to improve under the same push, so it isn't a case of one direction
+quietly working while the other drags the average down.
+
+Together, that's a real dissociation between knowing and being
+steerable. The model knows which action its policy calls for, but that
+knowledge isn't something this push can act on. Practically, that
+argues for using this as a passive guardrail, a pre-generation check on
+whether an agent is about to call a tool it shouldn't, rather than a
+live correction mechanism. One thing worth trying next is training the
+steering direction on the reject cases alone instead of pooling both
+instruction types together, since calling the tool and rejecting may
+need genuinely different pushes, not one shared one.
 
 ## Citation
 
