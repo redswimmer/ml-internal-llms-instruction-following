@@ -251,7 +251,7 @@ I replaced it with a binary pass/fail judge, with explicit criteria
 instead of an unanchored number. To trust the result, I used a
 student/auditor setup: `GPT 5.6 Luna` is the student judge, cheap and
 fast enough to score every row in production, and `Claude Sonnet 5` is
-the auditor, reading every response fresh as an independent check. Getting to 94%+ agreement took several iterative rounds of prompt engineering with the auditor critiquing the student judge's output.
+the auditor, reading every response fresh as an independent check. Getting to 94%+ agreement took several iterative rounds of prompt engineering with the auditor critiquing the student judge's output before I was confident enough to promote the student judge to production.
 
 **The loop:**
 
@@ -261,18 +261,19 @@ flowchart TD
     B --> C["Independently re-score the same<br/>responses with Claude Sonnet 5 (auditor judge)"]
     C --> D{Do the two align?}
     D -->|No, revise| A
-    D -->|Yes| E[Promote Luna to production judge]
+    D -->|Yes| E[Promote GPT 5.6 Luna to production judge]
 ```
 
 ### LLM Judge Roles
 
-Each judge has its own job, scored against explicit pass/fail criteria
-instead of a vibe: the in-scope judge checks the model's confirmation,
-the out-of-scope judge checks its refusal. Neither judges tool usage,
-the checker already handled that. Both only ever see the model's own
-written explanation, never the tool call itself.
+Each judge scores response quality, not whether the policy was
+followed, that's the checker's job, using explicit pass/fail criteria
+instead of a vibe: one scores the model's confirmation text when it
+calls the right tool, the other scores its refusal text when it
+declines. Both only ever see the model's own written explanation,
+never the tool call itself.
 
-#### Should Call the Tool
+#### Judge Prompt When the Policy Calls for a Tool Call
 
 Used whenever the correct tool exists and the model is
 expected to call it:
@@ -291,9 +292,9 @@ Criteria:
 # Score of the Output (Your response must be ONLY the single integer 0 or 1, with no words, punctuation, or explanation):
 ```
 
-#### Should Reject
+#### Judge Prompt When the Policy Calls for Rejection
 Used whenever no offered tool can fulfill the request
-and the model is expected to decline:
+and the model is expected to call the reject tool:
 
 ```
 You are evaluating whether a response declines a request the system cannot fulfill.
