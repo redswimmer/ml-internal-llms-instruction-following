@@ -8,9 +8,8 @@ engineering, from free-text instructions to tool calling.
 **The short version:** on Mistral-7B-Instruct-v0.3, a probe reading the
 model's activations predicts whether it will call the right tool or
 correctly decline at 0.71 AUROC before generation even begins, rising
-to 0.84 by the end of the response. Steering along that same direction,
-the paper's own intervention, never converts a single failure into a
-success. The model knows which
+to 0.84 by the end of the response. Steering along that same direction
+never converts a single failure into a success. The model knows which
 action its policy calls for; it just can't be pushed into taking it.
 
 **Dataset:** [`data/tool_calling.jsonl`](data/tool_calling.jsonl), 100
@@ -134,8 +133,9 @@ trained to predict, a correlation.
 
 Representation engineering tests
 whether nudging the model along that same direction can cause success
-instead of just predicting it, the same push the paper uses, applied
-here to the accept/reject decision. Success rate below adds one more
+instead of just predicting it, the same intervention the paper uses,
+though the direction itself is built differently (see Representation
+Engineering below), applied here to the accept/reject decision. Success rate below adds one more
 gate on top: a response only counts as a success if it's also judged
 high quality, not just checker-correct. A same-magnitude push in a
 random direction is the control, to check any effect comes from that
@@ -467,9 +467,11 @@ I tried the paper's formula first, at its published Mistral alpha
 unmodified responses. As due diligence, I swept alpha well beyond that,
 up to 3.0,
 twenty times the published value, same result, no measurable
-difference, for the trained direction or its random control alike, a
-projection can only shrink a vector, never grow it, so the push stays
-too small to matter regardless of alpha. Existing work on how these
+difference. The magnitude-matched random control was just as inert at
+every point in the sweep, so the problem is the push's magnitude, not
+its orientation: the projection shrinks the direction enough that, at
+any alpha in this range, the shift never gets large enough to change
+greedy decoding. Existing work on how these
 directions are built suggested an alternative: unprojected mass-mean
 directions tend to beat probe-weight ones for steering
 ([Marks & Tegmark](https://arxiv.org/abs/2310.06824)). I used the mean
@@ -577,10 +579,10 @@ calling a tool and calling reject, the model's own internal state
 already distinguishes which one the situation calls for.
 
 The model can't be steered toward more reliably following that policy
-on Mistral-7B-Instruct-v0.3, at least not with the same lever the paper uses,
-nudging the representation along what it calls the
-instruction-following direction. In the paper's own text-only setting,
-that push clearly helps. It doesn't transfer here, it never raises the
+on Mistral-7B-Instruct-v0.3, at least not with the paper's
+intervention, a first-token, last-layer push, applied along the
+mean-difference direction, the same construction that clearly helps in
+the text-only setting. It doesn't transfer here, it never raises the
 tool-calling success rate. It's actively harmful, it never converts a
 genuine failure into a success, while quietly breaking responses that
 were already correct. That holds for both directions of the policy
