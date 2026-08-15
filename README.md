@@ -7,9 +7,10 @@ engineering, from free-text instructions to tool calling.
 
 **The short version:** on Mistral-7B-Instruct-v0.3, a probe reading the
 model's activations predicts whether it will call the right tool or
-correctly decline before the model emits a single token (up to 0.84
-AUROC). Steering along that same direction, the paper's own intervention,
-never converts a single failure into a success. The model knows which
+correctly decline at 0.71 AUROC before generation even begins, rising
+to 0.84 by the end of the response. Steering along that same direction,
+the paper's own intervention, never converts a single failure into a
+success. The model knows which
 action its policy calls for; it just can't be pushed into taking it.
 
 **Dataset:** [`data/tool_calling.jsonl`](data/tool_calling.jsonl), 100
@@ -567,10 +568,10 @@ Whatever this lever is doing, it isn't doing it selectively.
 ## Conclusion
 
 The model knows whether it'll follow the policy, in the sense the paper
-itself uses that word. A probe trained on its activations, before it
-ever emits a tool call, separates the requests it'll handle correctly
-from the ones it won't well above chance (task generalization up to
-0.84 AUROC). That signal even carries, more weakly, to a type of
+itself uses that word. A probe trained on its activations separates the
+requests it'll handle correctly from the ones it won't well above
+chance: 0.71 AUROC before it ever emits a tool call, rising to 0.84 by
+the end of the response. That signal even carries, more weakly, to a type of
 request it's never seen a single example of. Before it decides between
 calling a tool and calling reject, the model's own internal state
 already distinguishes which one the situation calls for.
