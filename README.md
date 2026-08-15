@@ -1,23 +1,11 @@
 # Do LLMs Know When to Say No?
 
-A fork of Apple's [ICLR 2025 instruction-following
+*A fork of Apple's [ICLR 2025 instruction-following
 repo](https://github.com/apple/ml-internal-llms-instruction-following),
-extending both of its core experiments, linear probing and representation
-engineering, from free-text instructions to tool calling.
-
-**The short version:** on Mistral-7B-Instruct-v0.3, a probe reading the
-model's activations predicts whether it will call the right tool or
-correctly decline at 0.71 AUROC before generation even begins, rising
-to 0.84 by the end of the response. Steering along that same direction
-never converts a single failure into a success. The model knows which
-action its policy calls for; it just can't be pushed into taking it.
-
-**Dataset:** [`data/tool_calling.jsonl`](data/tool_calling.jsonl), 100
-tasks × 2 conditions, paired so the request is word-for-word identical
-and only the tool menu changes.
-
-**Upstream:** Apple's original README, unchanged, is preserved at
-[`README_upstream.md`](README_upstream.md).
+extending its probing and steering experiments from free-text
+instructions to tool calling, the setting agents actually operate in.
+Apple's original README is preserved unchanged at
+[`README_upstream.md`](README_upstream.md).*
 
 ## Introduction
 
